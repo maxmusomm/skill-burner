@@ -1,0 +1,26 @@
+services:
+  agent:
+    build:
+      context: ./agent
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      GOOGLE_GENAI_USE_VERTEXAI: FALSE
+      GOOGLE_API_KEY: AIzaSyA9DnpmNixJ-w0y1JkfJr5ltwm2HEqj1pE
+  server:
+    depends_on:
+      - agent
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    ports:
+      - "9000:9000"
+  client:
+    depends_on:
+      - server
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"

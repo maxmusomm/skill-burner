@@ -1,0 +1,32 @@
+# Dockerignore
+
+# Git
+.git
+.gitignore
+# VSCode
+.vscode
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.env
+.venv
+env
+venv
+ENV
+# If you have other virtual environment names, add them here
+
+# IDE specific files
+.idea
+*.iml
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Sensitive files - add any files containing secrets or sensitive information
+# For example:
+# .env
+# secrets.yaml

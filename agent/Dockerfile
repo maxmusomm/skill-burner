@@ -1,28 +1,12 @@
-FROM python:3.13.3-alpine
+FROM python:3.13-slim
 
-# Install system dependencies for WeasyPrint
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    libpango-1.0-0 \
-    libpangocairo-1.0-0 \
-    libgdk-pixbuf2.0-0 \
-    libffi-dev \
-    libssl-dev \
-    libxml2 \
-    libxslt1.1 \
-    libjpeg-dev \
-    zlib1g-dev \
-    && apt-get clean
-
-# Set workdir
 WORKDIR /app
 
-# Copy files
-COPY . /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Install Python deps
-RUN pip install --upgrade pip
-RUN pip install -r requirements.txt
+COPY . .
 
-# Run the app
-CMD ["python", "main.py"]
+EXPOSE 8000
+
+CMD cd testapp && adk api_server

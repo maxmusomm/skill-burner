@@ -1,10 +1,12 @@
 # --- Imports ---
-from google.adk.agents import LlmAgent, SequentialAgent, LoopAgent, ParallelAgent
+from google.adk.agents import LlmAgent, SequentialAgent, LoopAgent, ParallelAgent, BaseAgent
 from google.adk.sessions import InMemorySessionService, DatabaseSessionService, Session
 from google.adk.runners import Runner
 from google.adk.tools import google_search, ToolContext, FunctionTool, agent_tool
+from google.adk.events.event import Event
 from weasyprint import HTML
 from . import instructions
+from typing import AsyncGenerator
 
 # --- Constants and Configuration ---
 APP_NAME = "app"
@@ -23,7 +25,7 @@ GEMINI_MODEL = "gemini-2.0-flash-lite"
 # DB version
 # session_service = DatabaseSessionService(db_url="sqlite:///app.db")
 session_service = InMemorySessionService()
-session: Session = session_service.create_session_sync(
+session: Session = session_service.create_session(
     app_name=APP_NAME, user_id=USER_ID, session_id=SESSION_ID, state={DRAFTED_POINTS: "No points"}
 )
 
@@ -344,5 +346,3 @@ root_agent = LlmAgent(
 
 # --- ADK Runner Setup ---
 runner = Runner(agent=root_agent, app_name=APP_NAME, session_service=session_service)
-
-
