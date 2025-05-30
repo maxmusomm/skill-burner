@@ -18,36 +18,21 @@ export default function SkillBurnPage() {
       console.log("Connected to Socket.IO server:", newSocket.id);
     });
 
-    newSocket.on("receive_response", (responseData) => {
-      console.log("Response from server:", responseData);
-      let agentText = "Sorry, I could not understand the response.";
-      let isError = true;
-
-      // Attempt to extract text from various possible structures
-      if (responseData && typeof responseData.text === 'string') {
-        agentText = responseData.text;
-        isError = false;
-      } else if (responseData && responseData.parts && Array.isArray(responseData.parts) && responseData.parts.length > 0 && typeof responseData.parts[0].text === 'string') {
-        agentText = responseData.parts[0].text;
-        isError = false;
-      } else if (typeof responseData === 'string') { // Handle plain string responses
-        agentText = responseData;
-        isError = false;
-      }
-
-
-      const agentMsg = {
-        id: Date.now() + 1, // Ensure unique ID
-        text: agentText,
-        sender: "agent",
-        isError: isError
-      };
-      setMessages(prevMessages => [...prevMessages, agentMsg]);
-
-      if (isError && !(typeof responseData === 'string')) { // Log if malformed and not a simple string
-        console.error("Received malformed or unexpected message structure from server:", responseData);
-      }
+    newSocket.on('initial_messages', (initialMessages) => {
+      console.log("Received initial messages:", initialMessages);
+      setMessages(initialMessages);
     });
+
+    newSocket.on('new_message', (newMessage) => {
+      console.log("Received new message:", newMessage);
+      setMessages(prevMessages => [...prevMessages, newMessage]);
+    });
+
+    // newSocket.on("receive_response", (responseData) => {
+    //   console.log("Response from server:", responseData);
+    //   // This listener is now primarily for logging or specific handling if needed,
+    //   // as messages are pushed via 'new_message'
+    // });
 
     newSocket.on("error_response", (error) => {
       console.error("Error from server:", error);
@@ -55,7 +40,8 @@ export default function SkillBurnPage() {
         id: Date.now(),
         text: error.details || error.error || "An error occurred with the server.",
         sender: "agent",
-        isError: true
+        isError: true,
+        timestamp: new Date().toISOString()
       };
       setMessages(prevMessages => [...prevMessages, errorMsg]);
     });
@@ -96,8 +82,8 @@ export default function SkillBurnPage() {
 
   const handleSendMessage = () => {
     if (socket && message.trim()) {
-      const userMsg = { id: Date.now(), text: message.trim(), sender: "user" };
-      setMessages(prevMessages => [...prevMessages, userMsg]);
+      // const userMsg = { id: Date.now(), text: message.trim(), sender: "user" };
+      // setMessages(prevMessages => [...prevMessages, userMsg]); // Message will be added via 'new_message' event from server
       socket.emit("send_message", { message: message.trim() });
       setMessage(""); // Clear the input field
       if (textareaRef.current) {

@@ -2,6 +2,8 @@ const http = require('http');
 const { Server } = require('socket.io');
 const axios = require('axios'); // Keep axios for potential future use or alternative methods
 
+const db = []
+
 const httpServer = http.createServer();
 const io = new Server(httpServer, {
     cors: {
@@ -15,7 +17,7 @@ const creaeteSession = async () => {
     }
 
     try {
-        const response = await axios.post("http://localhost:8000/apps/SkillConsultantAgent/users/user_123/sessions/123", payload, {
+        const response = await axios.post("http://agent:8000/apps/SkillConsultantAgent/users/user_123/sessions/123", payload, {
             headers: {
                 'Content-Type': 'application/json',
             },
@@ -37,12 +39,26 @@ const creaeteSession = async () => {
     }
 }
 
+
 io.on('connection', (socket) => {
     console.log('Client connected:', socket.id);
     creaeteSession();
 
+    // Send existing messages to the newly connected client
+    socket.emit('initial_messages', db);
+
     socket.on('send_message', async (data) => {
         console.log('Message received from client:', data.message);
+        const userMessage = {
+            id: Date.now(),
+            text: data.message,
+            sender: 'user',
+            timestamp: new Date().toISOString()
+        };
+        db.push(userMessage);
+        console.log('Stored user message:', userMessage);
+        // Broadcast the new user message to all clients
+        io.emit('new_message', userMessage);
 
         try {
             const payload = {
@@ -59,7 +75,7 @@ io.on('connection', (socket) => {
             console.log('Sending POST request to API with payload:', payload);
 
             // Changed URL from http://agent:8080/run to http://agent:8000/run
-            const response = await axios.post('http://localhost:8000/run', payload, {
+            const response = await axios.post('http://agent:8000/run', payload, {
                 headers: {
                     'Content-Type': 'application/json',
                 },
@@ -71,7 +87,17 @@ io.on('connection', (socket) => {
             while (response.data[0].author !== "SkillConsultantAgent") {
                 console.log(`Response from ${response.data[0].author}:`, agentResponse);
             }
-            socket.emit('receive_response', agentResponse);
+            socket.emit('receive_response', agentResponse); // This line might be redundant if agent messages are also sent via 'new_message'
+            const agentMessage = {
+                id: Date.now() + 1, // Ensure unique ID
+                text: agentResponse,
+                sender: 'agent',
+                timestamp: new Date().toISOString()
+            };
+            db.push(agentMessage);
+            console.log('Stored agent message:', agentMessage);
+            // Broadcast the new agent message to all clients
+            io.emit('new_message', agentMessage);
 
         } catch (error) {
             console.error('Error communicating with API:'); // Updated log message
@@ -97,9 +123,6 @@ io.on('connection', (socket) => {
     });
 });
 
-httpServer.listen(9000, () => {
+httpServer.listen(9000, '0.0.0.0', () => {
     console.log('Socket.IO server running on port 9000');
 });
-const beans = [{ "content": { "parts": [{ "functionCall": { "id": "af-e75e946d-c02a-4aad-931e-49e4ab859838", "args": { "city": "new york" }, "name": "get_weather" } }], "role": "model" }, "invocationId": "e-71353f1e-aea1-4821-aa4b-46874a766853", "author": "weather_time_agent", "actions": { "stateDelta": {}, "artifactDelta": {}, "requestedAuthConfigs": {} }, "longRunningToolIds": [], "id": "2Btee6zW", "timestamp": 1743712220.385936 }, { "content": { "parts": [{ "functionResponse": { "id": "af-e75e946d-c02a-4aad-931e-49e4ab859838", "name": "get_weather", "response": { "status": "success", "report": "The weather in New York is sunny with a temperature of 25 degrees Celsius (41 degrees Fahrenheit)." } } }], "role": "user" }, "invocationId": "e-71353f1e-aea1-4821-aa4b-46874a766853", "author": "weather_time_agent", "actions": { "stateDelta": {}, "artifactDelta": {}, "requestedAuthConfigs": {} }, "id": "PmWibL2m", "timestamp": 1743712221.895042 }, { "content": { "parts": [{ "text": "OK. The weather in New York is sunny with a temperature of 25 degrees Celsius (41 degrees Fahrenheit).\n" }], "role": "model" }, "invocationId": "e-71353f1e-aea1-4821-aa4b-46874a766853", "author": "weather_time_agent", "actions": { "stateDelta": {}, "artifactDelta": {}, "requestedAuthConfigs": {} }, "id": "sYT42eVC", "timestamp": 1743712221.899018 }]
-
-beans[0].author
