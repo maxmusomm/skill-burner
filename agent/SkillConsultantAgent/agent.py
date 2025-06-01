@@ -25,7 +25,7 @@ GEMINI_MODEL = "gemini-2.0-flash-lite"
 # DB version
 # session_service = DatabaseSessionService(db_url="sqlite:///app.db")
 session_service = InMemorySessionService()
-session: Session = session_service.create_session(
+session: Session = session_service.create_session_sync(
     app_name=APP_NAME, user_id=USER_ID, session_id=SESSION_ID, state={DRAFTED_POINTS: "No points"}
 )
 

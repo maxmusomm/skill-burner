@@ -42,6 +42,44 @@ export default function SkillBurnPage() {
 
     newSocket.on("connect", () => {
       console.log("Connected to Socket.IO server:", newSocket.id);
+
+      // Send user authentication data if session exists
+      if (session?.user) {
+        const userData = {
+          email: session.user.email,
+          name: session.user.name,
+          image: session.user.image,
+        };
+        console.log("Sending user authentication data:", userData);
+        newSocket.emit("user_authenticated", userData);
+      }
+    });
+
+    newSocket.on('user_processed', (response) => {
+      if (response.success) {
+        console.log("User processed successfully:", response.user);
+
+        // Create a session after user is processed
+        if (session?.user?.id) {
+          const sessionData = {
+            sessionId: session.user.id // Using the session-specific ID from NextAuth
+          };
+          console.log("Creating session with ID:", sessionData.sessionId);
+          newSocket.emit("create_session", sessionData);
+        }
+      } else {
+        console.error("Error processing user:", response.error);
+      }
+    });
+
+    newSocket.on('session_created', (response) => {
+      console.log("Session created successfully:", response.session);
+      console.log("Existing messages for session:", response.messages);
+      // You can load existing messages from this session if needed
+    });
+
+    newSocket.on('session_error', (response) => {
+      console.error("Session error:", response.error);
     });
 
     newSocket.on('initial_messages', (initialMessages) => {
@@ -73,7 +111,20 @@ export default function SkillBurnPage() {
     return () => {
       newSocket.disconnect();
     };
-  }, []);
+  }, [session]); // Added session to dependency array
+
+  // Send user authentication data when session changes and socket is connected
+  useEffect(() => {
+    if (socket && session?.user) {
+      const userData = {
+        email: session.user.email,
+        name: session.user.name,
+        image: session.user.image,
+      };
+      console.log("Sending user authentication data (session change):", userData);
+      socket.emit("user_authenticated", userData);
+    }
+  }, [socket, session]);
 
   useEffect(() => {
     const textarea = textareaRef.current;
