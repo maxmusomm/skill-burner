@@ -14,6 +14,7 @@ export default function SkillBurnPage() {
   const [showStats, setShowStats] = useState(false); // Toggle for stats panel
   const textareaRef = useRef(null);
   const messagesEndRef = useRef(null); // Ref for scrolling to bottom
+  const [sessionCreationAttemptedForAuthId, setSessionCreationAttemptedForAuthId] = useState(null); // New state
 
   // Fetch user statistics
   const fetchUserStats = async () => {
@@ -44,13 +45,15 @@ export default function SkillBurnPage() {
       console.log("Connected to Socket.IO server:", newSocket.id);
 
       // Send user authentication data if session exists
-      if (session?.user) {
+      // This initial emission of user_authenticated might be redundant due to the second useEffect
+      // but can be kept for immediate auth on fresh connect if session is already present.
+      if (status === 'authenticated' && session?.user) {
         const userData = {
           email: session.user.email,
           name: session.user.name,
           image: session.user.image,
         };
-        console.log("Sending user authentication data:", userData);
+        console.log("Sending user authentication data on connect:", userData);
         newSocket.emit("user_authenticated", userData);
       }
     });
@@ -58,14 +61,17 @@ export default function SkillBurnPage() {
     newSocket.on('user_processed', (response) => {
       if (response.success) {
         console.log("User processed successfully:", response.user);
-
-        // Create a session after user is processed
-        if (session?.user?.id) {
+        // Now that user is processed, attempt to create the app session if conditions are met.
+        // The main logic for this is now more tightly controlled in the second useEffect.
+        // However, we can trigger the session creation attempt here if the session ID is available
+        // and hasn't been attempted yet for this auth ID.
+        if (status === 'authenticated' && session?.user?.id && sessionCreationAttemptedForAuthId !== session.user.id) {
           const sessionData = {
             sessionId: session.user.id // Using the session-specific ID from NextAuth
           };
-          console.log("Creating session with ID:", sessionData.sessionId);
+          console.log("Creating session with ID (after user_processed):", sessionData.sessionId);
           newSocket.emit("create_session", sessionData);
+          // setSessionCreationAttemptedForAuthId(sessionData.sessionId); // Mark as attempted
         }
       } else {
         console.error("Error processing user:", response.error);
@@ -75,11 +81,19 @@ export default function SkillBurnPage() {
     newSocket.on('session_created', (response) => {
       console.log("Session created successfully:", response.session);
       console.log("Existing messages for session:", response.messages);
-      // You can load existing messages from this session if needed
+      setMessages(response.messages || []); // Load existing messages
+      // Confirm session creation for this auth ID
+      if (session?.user?.id) {
+        setSessionCreationAttemptedForAuthId(session.user.id);
+      }
     });
 
     newSocket.on('session_error', (response) => {
       console.error("Session error:", response.error);
+      // Optionally, reset sessionCreationAttemptedForAuthId to allow a retry,
+      // or display an error to the user. For now, we'll keep it marked to avoid loops.
+      // If the error is "User not authenticated", it implies user_processed hasn't completed
+      // or currentUser is null on server.
     });
 
     newSocket.on('initial_messages', (initialMessages) => {
@@ -111,20 +125,52 @@ export default function SkillBurnPage() {
     return () => {
       newSocket.disconnect();
     };
-  }, [session]); // Added session to dependency array
+  }, []); // Removed session from dependency array, socket init should be once.
 
-  // Send user authentication data when session changes and socket is connected
+  // Effect for handling NextAuth.js session changes (login/logout)
   useEffect(() => {
-    if (socket && session?.user) {
-      const userData = {
-        email: session.user.email,
-        name: session.user.name,
-        image: session.user.image,
-      };
-      console.log("Sending user authentication data (session change):", userData);
-      socket.emit("user_authenticated", userData);
+    if (socket) {
+      if (status === 'authenticated' && session?.user) {
+        // User is authenticated
+        console.log("NextAuth session is authenticated:", session.user);
+        const userData = {
+          email: session.user.email,
+          name: session.user.name,
+          image: session.user.image,
+        };
+        console.log("Sending user_authenticated (auth status change):", userData);
+        socket.emit("user_authenticated", userData);
+
+        // Attempt to create app session if not already attempted for this auth ID
+        if (session.user.id && sessionCreationAttemptedForAuthId !== session.user.id) {
+          console.log("Attempting to create app session for NextAuth sessionId (auth status change):", session.user.id);
+          socket.emit("create_session", { sessionId: session.user.id });
+          // Optimistically set, or wait for 'session_created' / 'session_error'
+          // setSessionCreationAttemptedForAuthId(session.user.id); // Let 'session_created' handle this
+        }
+      } else if (status === 'unauthenticated') {
+        // User logged out
+        console.log("NextAuth session is unauthenticated. Resetting client state.");
+        setMessages([]);
+        setAppSession(null); // Assuming you have an appSession state
+        setSessionCreationAttemptedForAuthId(null); // Reset for next login
+        // Optionally, inform the server about logout if needed
+      }
     }
-  }, [socket, session]);
+  }, [socket, session, status, sessionCreationAttemptedForAuthId]); // Added sessionCreationAttemptedForAuthId
+
+  // Remove the redundant useEffect that was also emitting user_authenticated
+  // useEffect(() => {
+  //   if (socket && session?.user) {
+  //     const userData = {
+  //       email: session.user.email,
+  //       name: session.user.name,
+  //       image: session.user.image,
+  //     };
+  //     console.log("Sending user authentication data (session change):", userData);
+  //     socket.emit("user_authenticated", userData);
+  //   }
+  // }, [socket, session]); // THIS BLOCK IS REMOVED / COMMENTED OUT
 
   useEffect(() => {
     const textarea = textareaRef.current;

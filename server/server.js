@@ -1,144 +1,19 @@
 const http = require('http');
 const { Server } = require('socket.io');
 const axios = require('axios');
-const { MongoClient } = require('mongodb');
+const { connectToMongoDB, getDB } = require('./lib/db');
+const { createOrUpdateUser } = require('./lib/userController');
+const { createOrGetSession, addMessageToSession, getSessionMessages } = require('./lib/sessionController');
+const { createAgentSession } = require('./lib/agentController');
 
-const mongodbURI = 'mongodb://localhost:27017';
-const dbName = 'skill-burner';
-const db = [];
+
+const db = []; // This in-memory db can be removed if not needed for backward compatibility
 
 // MongoDB connection
-let mongoClient;
-let mongoDB;
-
-const connectToMongoDB = async () => {
-    try {
-        mongoClient = new MongoClient(mongodbURI);
-        await mongoClient.connect();
-        mongoDB = mongoClient.db(dbName);
-        console.log('Connected to MongoDB successfully');
-
-        // Create indexes for better performance
-        await mongoDB.collection('users').createIndex({ email: 1 }, { unique: true });
-        await mongoDB.collection('sessions').createIndex({ sessionId: 1 }, { unique: true });
-        await mongoDB.collection('sessions').createIndex({ userId: 1 });
-
-    } catch (error) {
-        console.error('Error connecting to MongoDB:', error);
-    }
-};
-
-// Initialize MongoDB connection
-connectToMongoDB();
-
-// User management functions
-const createOrUpdateUser = async (userData) => {
-    try {
-        const usersCollection = mongoDB.collection('users');
-        const { email, name, image } = userData;
-
-        // Check if user exists by email only
-        const existingUser = await usersCollection.findOne({ email });
-
-        const currentTime = new Date();
-
-        if (existingUser) {
-            // Update existing user's last login and any changed data
-            const updateData = {
-                name,
-                image,
-                lastLogin: currentTime
-            };
-
-            const result = await usersCollection.updateOne(
-                { _id: existingUser._id },
-                { $set: updateData }
-            );
-
-            console.log('User updated:', result);
-            return { ...existingUser, ...updateData };
-        } else {
-            // Create new user
-            const newUser = {
-                email,
-                name,
-                image,
-                createdDate: currentTime,
-                lastLogin: currentTime
-            };
-
-            const result = await usersCollection.insertOne(newUser);
-            console.log('New user created:', result);
-            return { ...newUser, _id: result.insertedId };
-        }
-    } catch (error) {
-        console.error('Error creating/updating user:', error);
-        throw error;
-    }
-};
-
-// Session management functions
-const createOrGetSession = async (sessionId, userId) => {
-    try {
-        const sessionsCollection = mongoDB.collection('sessions');
-
-        // Check if session exists
-        const existingSession = await sessionsCollection.findOne({ sessionId });
-
-        if (existingSession) {
-            console.log('Existing session found:', existingSession._id);
-            return existingSession;
-        } else {
-            // Create new session
-            const newSession = {
-                sessionId,
-                userId,
-                messages: [],
-                createdDate: new Date(),
-                lastActivity: new Date()
-            };
-
-            const result = await sessionsCollection.insertOne(newSession);
-            console.log('New session created:', result.insertedId);
-            return { ...newSession, _id: result.insertedId };
-        }
-    } catch (error) {
-        console.error('Error creating/getting session:', error);
-        throw error;
-    }
-};
-
-const addMessageToSession = async (sessionId, messageData) => {
-    try {
-        const sessionsCollection = mongoDB.collection('sessions');
-
-        const result = await sessionsCollection.updateOne(
-            { sessionId },
-            {
-                $push: { messages: messageData },
-                $set: { lastActivity: new Date() }
-            }
-        );
-
-        console.log('Message added to session:', result);
-        return result;
-    } catch (error) {
-        console.error('Error adding message to session:', error);
-        throw error;
-    }
-};
-
-const getSessionMessages = async (sessionId) => {
-    try {
-        const sessionsCollection = mongoDB.collection('sessions');
-        const session = await sessionsCollection.findOne({ sessionId });
-
-        return session ? session.messages : [];
-    } catch (error) {
-        console.error('Error getting session messages:', error);
-        throw error;
-    }
-};
+connectToMongoDB().catch(error => {
+    console.error("Failed to connect to MongoDB on startup:", error);
+    process.exit(1); // Exit if DB connection fails
+});
 
 const httpServer = http.createServer();
 const io = new Server(httpServer, {
@@ -146,36 +21,6 @@ const io = new Server(httpServer, {
         origin: '*',
     },
 });
-
-// Renamed and modified function to create a session with the external agent
-const createAgentSession = async (appUserId, appSessionId) => {
-    const payload = {
-        state: {} // Or any other relevant initial state for the agent
-    }
-
-    try {
-        // Use the dynamic appUserId and appSessionId in the URL
-        const response = await axios.post(`http://localhost:8000/apps/SkillConsultantAgent/users/${appUserId}/sessions/${appSessionId}`, payload, {
-            headers: {
-                'Content-Type': 'application/json',
-            },
-        })
-
-        console.log('Agent session created successfully for user:', appUserId, 'app session:', appSessionId, response.data);
-    }
-    catch (error) {
-        console.error('Error creating agent session for user:', appUserId, 'app session:', appSessionId);
-        if (error.response) {
-            console.error('Data:', error.response.data);
-            console.error('Status:', error.response.status);
-            console.error('Headers:', error.response.headers);
-        } else if (error.request) {
-            console.error('Request:', error.request);
-        } else {
-            console.error('Error message:', error.message);
-        }
-    }
-}
 
 io.on('connection', (socket) => {
     console.log('Client connected:', socket.id);
@@ -232,7 +77,7 @@ io.on('connection', (socket) => {
 
             // Create a session with the external agent using dynamic IDs
             if (currentUser && appSession) {
-                createAgentSession(currentUser._id.toString(), appSession._id.toString())
+                createAgentSession(currentUser._id.toString(), appSession._id.toString()) // Uses imported function
                     .catch(err => console.error("Failed to initiate agent session creation:", err)); // Log errors from the async call
             }
 
