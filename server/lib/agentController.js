@@ -1,9 +1,13 @@
 const axios = require('axios');
 
 // Renamed and modified function to create a session with the external agent
-const createAgentSession = async (appUserId, appSessionId) => {
+const createAgentSession = async (appUserId, appSessionId, userName) => {
     const payload = {
-        state: {} // Or any other relevant initial state for the agent
+        state: {
+            user_id: appUserId, // Use passed appUserId
+            session_id: appSessionId, // Use passed appSessionId
+            user_name: userName, // Use passed userName
+        } // Or any other relevant initial state for the agent
     }
 
     try {

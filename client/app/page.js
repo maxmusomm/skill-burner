@@ -14,7 +14,12 @@ export default function SkillBurnPage() {
   const [showStats, setShowStats] = useState(false); // Toggle for stats panel
   const textareaRef = useRef(null);
   const messagesEndRef = useRef(null); // Ref for scrolling to bottom
-  const [sessionCreationAttemptedForAuthId, setSessionCreationAttemptedForAuthId] = useState(null); // New state
+  const [currentSessionId, setCurrentSessionId] = useState(null); // Track current session ID
+  const [existingSessions, setExistingSessions] = useState([]); // Track user's existing sessions
+  const [showSessionSelector, setShowSessionSelector] = useState(false); // Toggle for session selector
+  const [userPdfs, setUserPdfs] = useState([]); // Track user's PDFs
+  const [showPdfs, setShowPdfs] = useState(false); // Toggle for PDF dropdown
+  const [showSidebar, setShowSidebar] = useState(false); // Toggle for sidebar
 
   // Fetch user statistics
   const fetchUserStats = async () => {
@@ -29,12 +34,56 @@ export default function SkillBurnPage() {
     }
   };
 
+  // Fetch user PDFs
+  const fetchUserPdfs = async (sessionId = null) => {
+    try {
+      let url = '/api/pdfs';
+      if (sessionId) {
+        url += `?sessionId=${sessionId}`;
+      }
+
+      const response = await fetch(url);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setUserPdfs(data.pdfs);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching user PDFs:', error);
+    }
+  };
+
+  // Download PDF
+  const downloadPdf = async (fileId, filename) => {
+    try {
+      const response = await fetch(`/api/pdfs/${fileId}`);
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      } else {
+        console.error('Failed to download PDF');
+      }
+    } catch (error) {
+      console.error('Error downloading PDF:', error);
+    }
+  };
+
   useEffect(() => {
-    // Fetch stats when session is available
+    // Fetch stats and PDFs when session is available
     if (session) {
       fetchUserStats();
+      fetchUserPdfs(currentSessionId);
     }
-  }, [session]);
+  }, [session, currentSessionId]);
 
   useEffect(() => {
     // Initialize socket connection
@@ -61,18 +110,14 @@ export default function SkillBurnPage() {
     newSocket.on('user_processed', (response) => {
       if (response.success) {
         console.log("User processed successfully:", response.user);
-        // Now that user is processed, attempt to create the app session if conditions are met.
-        // The main logic for this is now more tightly controlled in the second useEffect.
-        // However, we can trigger the session creation attempt here if the session ID is available
-        // and hasn't been attempted yet for this auth ID.
-        if (status === 'authenticated' && session?.user?.id && sessionCreationAttemptedForAuthId !== session.user.id) {
-          const sessionData = {
-            sessionId: session.user.id // Using the session-specific ID from NextAuth
-          };
-          console.log("Creating session with ID (after user_processed):", sessionData.sessionId);
-          newSocket.emit("create_session", sessionData);
-          // setSessionCreationAttemptedForAuthId(sessionData.sessionId); // Mark as attempted
+        console.log("Existing sessions:", response.existingSessions);
+        setExistingSessions(response.existingSessions || []);
+
+        // If user has existing sessions, show sidebar instead of auto-creating
+        if (response.existingSessions && response.existingSessions.length > 0) {
+          setShowSidebar(true);
         }
+        // Don't automatically create a session anymore - user will choose
       } else {
         console.error("Error processing user:", response.error);
       }
@@ -82,18 +127,27 @@ export default function SkillBurnPage() {
       console.log("Session created successfully:", response.session);
       console.log("Existing messages for session:", response.messages);
       setMessages(response.messages || []); // Load existing messages
-      // Confirm session creation for this auth ID
-      if (session?.user?.id) {
-        setSessionCreationAttemptedForAuthId(session.user.id);
+      setCurrentSessionId(response.session.sessionId);
+      setShowSessionSelector(false); // Hide session selector after creating session
+      setShowSidebar(false); // Hide sidebar on mobile after session created
+    });
+
+    newSocket.on('session_joined', (response) => {
+      if (response.session) {
+        console.log("Session joined successfully:", response.session);
+        console.log("Existing messages for session:", response.messages);
+        setMessages(response.messages || []); // Load existing messages
+        setCurrentSessionId(response.session.sessionId);
+        setShowSessionSelector(false); // Hide session selector after joining session
+        setShowSidebar(false); // Hide sidebar on mobile after session joined
+      } else {
+        console.error("Error joining session: Invalid response format", response);
       }
     });
 
     newSocket.on('session_error', (response) => {
       console.error("Session error:", response.error);
-      // Optionally, reset sessionCreationAttemptedForAuthId to allow a retry,
-      // or display an error to the user. For now, we'll keep it marked to avoid loops.
-      // If the error is "User not authenticated", it implies user_processed hasn't completed
-      // or currentUser is null on server.
+      // Could show error message to user here
     });
 
     newSocket.on('initial_messages', (initialMessages) => {
@@ -111,6 +165,8 @@ export default function SkillBurnPage() {
       setDocumentsStored(data);
       // Refresh user stats when documents are stored
       fetchUserStats();
+      // Refresh PDFs for current session when documents are stored
+      fetchUserPdfs(currentSessionId);
       // Auto-hide notification after 5 seconds
       setTimeout(() => setDocumentsStored(null), 5000);
     });
@@ -141,23 +197,18 @@ export default function SkillBurnPage() {
         console.log("Sending user_authenticated (auth status change):", userData);
         socket.emit("user_authenticated", userData);
 
-        // Attempt to create app session if not already attempted for this auth ID
-        if (session.user.id && sessionCreationAttemptedForAuthId !== session.user.id) {
-          console.log("Attempting to create app session for NextAuth sessionId (auth status change):", session.user.id);
-          socket.emit("create_session", { sessionId: session.user.id });
-          // Optimistically set, or wait for 'session_created' / 'session_error'
-          // setSessionCreationAttemptedForAuthId(session.user.id); // Let 'session_created' handle this
-        }
+        // Session creation will be handled in user_processed event
       } else if (status === 'unauthenticated') {
         // User logged out
         console.log("NextAuth session is unauthenticated. Resetting client state.");
         setMessages([]);
-        setAppSession(null); // Assuming you have an appSession state
-        setSessionCreationAttemptedForAuthId(null); // Reset for next login
+        setCurrentSessionId(null);
+        setExistingSessions([]);
+        setShowSessionSelector(false);
         // Optionally, inform the server about logout if needed
       }
     }
-  }, [socket, session, status, sessionCreationAttemptedForAuthId]); // Added sessionCreationAttemptedForAuthId
+  }, [socket, session, status]); // Removed sessionCreationAttemptedForAuthId
 
   // Remove the redundant useEffect that was also emitting user_authenticated
   // useEffect(() => {
@@ -201,10 +252,11 @@ export default function SkillBurnPage() {
   }, [messages]);
 
   const handleSendMessage = () => {
-    if (socket && message.trim()) {
-      // const userMsg = { id: Date.now(), text: message.trim(), sender: "user" };
-      // setMessages(prevMessages => [...prevMessages, userMsg]); // Message will be added via 'new_message' event from server
-      socket.emit("send_message", { message: message.trim() });
+    if (socket && message.trim() && currentSessionId) {
+      socket.emit("send_message", {
+        message: message.trim(),
+        sessionId: currentSessionId
+      });
       setMessage(""); // Clear the input field
       if (textareaRef.current) {
         textareaRef.current.value = ""; // Clear the textarea directly
@@ -219,6 +271,26 @@ export default function SkillBurnPage() {
   const handleInputChange = (e) => {
     setMessage(e.target.value);
     // The existing input event listener will handle resize
+  };
+
+  // Session management functions
+  const createNewSession = () => {
+    if (socket) {
+      console.log("Creating new session...");
+      socket.emit("create_session");
+    }
+  };
+
+  const joinExistingSession = (sessionId) => {
+    if (socket && sessionId) {
+      console.log("Joining session:", sessionId);
+      socket.emit("join_session", { sessionId });
+    }
+  };
+
+  const formatSessionDate = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
   return (
@@ -245,8 +317,19 @@ export default function SkillBurnPage() {
       )}
 
       <div className="layout-container flex h-full grow flex-col">
-        <header className="flex items-center justify-between whitespace-nowrap border-b border-solid border-b-[#293038] px-10 py-3">
+        <header className="sticky top-0 z-30 bg-[#111418] flex items-center justify-between whitespace-nowrap border-b border-solid border-b-[#293038] px-4 sm:px-10 py-3">
           <div className="flex items-center gap-4 text-white">
+            {/* Hamburger Menu Button */}
+            <button
+              onClick={() => setShowSidebar(!showSidebar)}
+              className="p-2 hover:bg-[#293038] rounded-lg transition-colors duration-200 lg:hidden"
+              title="Toggle Sessions"
+            >
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
+              </svg>
+            </button>
+
             <div className="size-4">
               <svg
                 viewBox="0 0 48 48"
@@ -266,17 +349,130 @@ export default function SkillBurnPage() {
           <div className="flex flex-1 justify-end gap-8">
             {session ? (
               <>
-                {/* User Stats Button */}
+                {/* Sidebar Toggle Button for Desktop */}
                 <button
-                  onClick={() => setShowStats(!showStats)}
-                  className="flex max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-full h-10 bg-[#293038] text-white gap-2 text-sm font-bold leading-normal tracking-[0.015em] min-w-0 px-2.5"
+                  onClick={() => setShowSidebar(!showSidebar)}
+                  className="hidden lg:flex items-center justify-center p-2 hover:bg-[#293038] rounded-lg transition-colors duration-200"
+                  title="Toggle Sessions"
                 >
-                  <div className="text-white">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20px" height="20px" fill="currentColor" viewBox="0 0 256 256">
-                      <path d="M224,128a8,8,0,0,1-8,8H40a8,8,0,0,1,0-16H216A8,8,0,0,1,224,128ZM40,72H216a8,8,0,0,0,0-16H40a8,8,0,0,0,0,16ZM216,184H40a8,8,0,0,0,0,16H216a8,8,0,0,0,0-16Z" />
-                    </svg>
-                  </div>
+                  <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
+                  </svg>
                 </button>
+
+                {/* PDFs Button - Only show when there's an active session */}
+                {currentSessionId && (
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowPdfs(!showPdfs)}
+                      className="flex max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-full h-10 bg-[#293038] text-white gap-2 text-sm font-bold leading-normal tracking-[0.015em] min-w-0 px-2.5"
+                      title="View your generated PDFs"
+                    >
+                      <div className="text-white">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20px" height="20px" fill="currentColor" viewBox="0 0 256 256">
+                          <path d="M224,152a8,8,0,0,1-8,8H192v16a8,8,0,0,1-8,8H40a8,8,0,0,1-8-8V56a8,8,0,0,1,8-8H72V32a8,8,0,0,1,8-8H216a8,8,0,0,1,8,8Zm-40-8V48H88V160H184Z" />
+                        </svg>
+                      </div>
+                      {userPdfs.length > 0 && (
+                        <span className="bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                          {userPdfs.length}
+                        </span>
+                      )}
+                    </button>
+
+                    {/* PDF Dropdown */}
+                    {showPdfs && (
+                      <div className="absolute right-0 top-12 w-80 bg-[#293038] rounded-lg shadow-lg border border-[#3c4753] z-50 max-h-96 overflow-y-auto">
+                        <div className="p-4">
+                          <h3 className="text-white text-lg font-bold mb-4 flex items-center gap-2">
+                            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6z" clipRule="evenodd" />
+                            </svg>
+                            Your Generated PDFs ({userPdfs.length})
+                          </h3>
+
+                          {userPdfs.length === 0 ? (
+                            <div className="text-center py-8">
+                              <svg className="w-16 h-16 mx-auto mb-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6z" clipRule="evenodd" />
+                              </svg>
+                              <h4 className="text-white text-lg font-semibold mb-2">No PDFs Generated Yet</h4>
+                              <p className="text-gray-400 mb-4">
+                                Start a conversation with the agent to generate course materials and roadmaps.
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="space-y-3">
+                              {userPdfs.map((pdf) => (
+                                <div
+                                  key={pdf.id}
+                                  className="p-3 bg-[#111418] rounded-lg border border-[#3c4753] hover:border-[#1978e5] transition-all duration-200"
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex-1">
+                                      <div className="flex items-center gap-3 mb-2">
+                                        <div className="w-8 h-8 bg-red-100 rounded flex items-center justify-center">
+                                          <svg className="w-5 h-5 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fillRule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6z" clipRule="evenodd" />
+                                          </svg>
+                                        </div>
+                                        <div>
+                                          <h4 className="text-white font-semibold">{pdf.filename}</h4>
+                                          <div className="flex items-center gap-4 text-sm text-gray-400">
+                                            <span className="capitalize">{pdf.pdfType.replace('_', ' ')}</span>
+                                            <span>•</span>
+                                            <span>{new Date(pdf.uploadDate).toLocaleDateString()}</span>
+                                            <span>•</span>
+                                            <span>{new Date(pdf.uploadDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div className="flex gap-2">
+                                      <button
+                                        onClick={() => downloadPdf(pdf.fileId, pdf.filename)}
+                                        className="px-3 py-1.5 bg-[#1978e5] hover:bg-[#1565c0] text-white rounded text-sm font-medium transition-colors duration-200 flex items-center gap-2"
+                                      >
+                                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                          <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
+                                        </svg>
+                                        Download
+                                      </button>
+
+                                      <button
+                                        onClick={() => {
+                                          // Open PDF in new tab for preview
+                                          const url = `/api/pdfs/${pdf.fileId}`;
+                                          window.open(url, '_blank');
+                                        }}
+                                        className="px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white rounded text-sm font-medium transition-colors duration-200 flex items-center gap-2"
+                                      >
+                                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                          <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                                          <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
+                                        </svg>
+                                        Preview
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+
+                              <div className="pt-4 border-t border-[#3c4753]">
+                                <p className="text-gray-400 text-sm mb-2">
+                                  📄 <strong>Course PDFs:</strong> Detailed learning materials and structured content
+                                </p>
+                                <p className="text-gray-400 text-sm">
+                                  🗺️ <strong>Roadmap PDFs:</strong> Step-by-step learning paths and progression guides
+                                </p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* User Profile */}
                 <div
@@ -297,130 +493,395 @@ export default function SkillBurnPage() {
           </div>
         </header>
 
-        {/* User Statistics Panel */}
-        {showStats && userStats && (
-          <div className="mx-4 sm:mx-10 md:mx-20 lg:mx-40 mt-4 bg-[#293038] rounded-lg p-6 border border-[#3c4753]">
-            <h3 className="text-white text-lg font-bold mb-4 flex items-center gap-2">
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z" />
-              </svg>
-              Your Learning Statistics
-            </h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="bg-[#111418] p-4 rounded-lg">
-                <div className="text-2xl font-bold text-green-400">{userStats.totalDocuments || 0}</div>
-                <div className="text-sm text-gray-300">Documents Created</div>
-              </div>
-              <div className="bg-[#111418] p-4 rounded-lg">
-                <div className="text-2xl font-bold text-blue-400">{userStats.totalSessions || 0}</div>
-                <div className="text-sm text-gray-300">Learning Sessions</div>
-              </div>
-              <div className="bg-[#111418] p-4 rounded-lg">
-                <div className="text-2xl font-bold text-purple-400">
-                  {userStats.firstDocument ?
-                    Math.ceil((new Date() - new Date(userStats.firstDocument)) / (1000 * 60 * 60 * 24)) : 0}
-                </div>
-                <div className="text-sm text-gray-300">Days Learning</div>
-              </div>
-              <div className="bg-[#111418] p-4 rounded-lg">
-                <div className="text-2xl font-bold text-yellow-400">
-                  {userStats.lastDocument ?
-                    `${Math.floor((new Date() - new Date(userStats.lastDocument)) / (1000 * 60 * 60))}h` : 'N/A'}
-                </div>
-                <div className="text-sm text-gray-300">Last Activity</div>
+        {/* Main Layout Container */}
+        <div className="flex flex-1 h-full relative">
+          {/* Sidebar for Sessions */}
+          <div className={`scrollbar-whatsapp-container fixed inset-y-0 left-0 z-50 w-80 bg-[#111b21] border-r border-[#313d44] transform transition-transform duration-300 ease-in-out lg:relative lg:transform-none lg:flex lg:w-80 ${showSidebar ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
+            {/* Desktop Header */}
+            <div className="hidden lg:flex items-center justify-between p-4 bg-[#202c33] border-b border-[#313d44]">
+              <h2 className="text-[#e9edef] font-semibold text-lg">Chats</h2>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowSidebar(false)}
+                  className="p-2 hover:bg-[#374045] rounded-full transition-colors duration-200"
+                  title="Close Sidebar"
+                >
+                  <svg className="w-5 h-5 text-[#8696a0]" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                </button>
               </div>
             </div>
 
-            {userStats.totalDocuments > 0 && (
-              <div className="mt-4 p-4 bg-[#111418] rounded-lg">
-                <h4 className="text-white font-semibold mb-2">Quick Facts</h4>
-                <div className="text-sm text-gray-300 space-y-1">
-                  <p>• First document created: {userStats.firstDocument ? new Date(userStats.firstDocument).toLocaleDateString() : 'N/A'}</p>
-                  <p>• Most recent activity: {userStats.lastDocument ? new Date(userStats.lastDocument).toLocaleDateString() : 'N/A'}</p>
-                  <p>• Average documents per session: {userStats.totalSessions > 0 ? (userStats.totalDocuments / userStats.totalSessions).toFixed(1) : '0'}</p>
-                </div>
-              </div>
-            )}
-
-            <button
-              onClick={() => setShowStats(false)}
-              className="mt-4 px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg text-sm transition-colors duration-200"
-            >
-              Close Stats
-            </button>
-          </div>
-        )}
-
-        <div className="px-40 flex flex-1 justify-center py-5">
-          <div className="layout-content-container flex flex-col max-w-[960px] flex-1">
-            <div className="flex flex-wrap justify-between gap-3 p-4">
-              <p className="text-white tracking-light text-[32px] font-bold leading-tight min-w-72">
-                SkillUp Agent
-              </p>
+            {/* Mobile Header */}
+            <div className="flex lg:hidden items-center justify-between p-4 bg-[#202c33] border-b border-[#313d44]">
+              <h2 className="text-[#e9edef] font-semibold text-lg">Chats</h2>
+              <button
+                onClick={() => setShowSidebar(false)}
+                className="p-2 hover:bg-[#374045] rounded-full transition-colors duration-200"
+              >
+                <svg className="w-5 h-5 text-[#8696a0]" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              </button>
             </div>
 
-            {/* Message display area */}
-            <div className="flex-grow overflow-y-auto space-y-3 min-h-[300px]">
-              {messages.length === 0 ? (
-                // Welcome message when no messages
-                <div className="flex gap-3 p-4">
-                  <div className="flex flex-1 flex-col items-stretch gap-2">
-                    <div className="flex flex-col gap-1">
-                      <p className="text-white text-base font-bold leading-tight">Agent</p>
-                      <p className="text-white text-base font-normal leading-normal">
-                        Hi there! I'm here to help you create a personalized skill course. What skills are you interested in learning or improving?
-                      </p>
-                    </div>
-                  </div>
+            {/* Sessions List */}
+            <div className="flex-1 overflow-y-auto pb-20 scrollbar-whatsapp">
+              {existingSessions.length === 0 ? (
+                <div className="text-center py-16 px-6">
+                  <svg className="w-16 h-16 mx-auto mb-4 text-[#8696a0]" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M20 2H4a2 2 0 00-2 2v12a2 2 0 002 2h4l3 3 3-3h6a2 2 0 002-2V4a2 2 0 00-2-2z" />
+                  </svg>
+                  <p className="text-[#8696a0] text-sm">No chats yet</p>
+                  <p className="text-[#667781] text-xs mt-1">Start your first conversation</p>
                 </div>
               ) : (
-                messages.map((msg) => (
-                  <div key={msg.id} className="flex gap-3 p-4">
-                    <div className="flex flex-1 flex-col items-stretch gap-2">
-                      <div className="flex flex-col gap-1">
-                        <p className="text-white text-base font-bold leading-tight">
-                          {msg.sender === 'user' ? 'User' : 'Agent'}
-                        </p>
-                        <p className={`text-white text-base font-normal leading-normal whitespace-pre-wrap ${msg.isError ? 'text-red-400' : ''
-                          }`}>
-                          {msg.text}
-                        </p>
+                <div className="py-2">
+                  {existingSessions.map((sessionItem) => (
+                    <div
+                      key={sessionItem.sessionId}
+                      onClick={() => joinExistingSession(sessionItem.sessionId)}
+                      className={`px-4 py-3 cursor-pointer transition-colors duration-200 hover:bg-[#202c33] border-l-4 ${currentSessionId === sessionItem.sessionId
+                        ? 'bg-[#202c33] border-l-[#00a884]'
+                        : 'border-l-transparent'
+                        }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        {/* Avatar */}
+                        <div className="w-12 h-12 bg-[#00a884] rounded-full flex items-center justify-center flex-shrink-0">
+                          <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+                          </svg>
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between">
+                            <div className="font-medium text-[#e9edef] text-sm truncate">
+                              Session {sessionItem.sessionId.slice(0, 8)}
+                            </div>
+                            <div className="text-[#8696a0] text-xs ml-2">
+                              {formatSessionDate(sessionItem.createdDate)}
+                            </div>
+                          </div>
+                          {sessionItem.lastMessage && (
+                            <div className="text-[#8696a0] text-sm mt-1 truncate">
+                              {sessionItem.lastMessage.slice(0, 45)}...
+                            </div>
+                          )}
+                          <div className="flex items-center justify-between mt-1">
+                            <span className="text-[#667781] text-xs">
+                              {sessionItem.messageCount || 0} messages
+                            </span>
+                            {currentSessionId === sessionItem.sessionId && (
+                              <div className="w-2 h-2 bg-[#00a884] rounded-full"></div>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))
+                  ))}
+                </div>
               )}
-              <div ref={messagesEndRef} />
             </div>
 
-            <div className="flex max-w-full w-full flex-wrap items-end gap-4 px-4 py-3">
-              <label className="flex flex-col min-w-40 flex-1">
-                <textarea
-                  id="message-input"
-                  ref={textareaRef}
-                  placeholder="Type your message..."
-                  value={message}
-                  onChange={handleInputChange}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSendMessage();
-                    }
-                  }}
-                  className="form-input resize-none flex w-full min-w-0 flex-1 overflow-hidden rounded-xl text-white focus:outline-0 focus:ring-0 border border-[#3c4753] bg-[#1c2126] focus:border-[#3c4753] h-14 placeholder:text-[#9daab8] p-[15px] text-base font-normal leading-normal"
-                  rows={1}
-                />
-              </label>
+            {/* Sticky New Session Button */}
+            <div className="absolute bottom-4 left-4 right-4 z-10">
               <button
-                onClick={handleSendMessage}
-                className="flex min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-full h-14 px-6 bg-[#1978e5] text-white text-sm font-bold leading-normal tracking-[0.015em]"
+                onClick={createNewSession}
+                className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-[#00a884] hover:bg-[#017561] text-white rounded-full font-medium transition-all duration-200 shadow-lg"
               >
-                <span className="truncate">Send</span>
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
+                </svg>
+                New Chat
               </button>
             </div>
           </div>
+
+          {/* Sidebar Overlay for Mobile */}
+          {showSidebar && (
+            <div
+              className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+              onClick={() => setShowSidebar(false)}
+            />
+          )}
+
+          {/* Main Content Area */}
+          <div className="flex-1 flex lg:ml-0">
+            {/* Session Selector */}
+            {showSessionSelector && session && (
+              <div className="mx-4 sm:mx-10 md:mx-20 lg:mx-40 mt-4 bg-[#293038] rounded-lg p-6 border border-[#3c4753]">
+                <h3 className="text-white text-lg font-bold mb-4 flex items-center gap-2">
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
+                  </svg>
+                  Choose a Session
+                </h3>
+
+                <div className="mb-4">
+                  <button
+                    onClick={createNewSession}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#1978e5] hover:bg-[#1565c0] text-white rounded-lg font-semibold transition-colors duration-200"
+                  >
+                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
+                    </svg>
+                    Start New Session
+                  </button>
+                </div>
+
+                {existingSessions.length > 0 && (
+                  <>
+                    <div className="mb-3">
+                      <h4 className="text-white font-semibold text-sm mb-2">Or continue an existing session:</h4>
+                    </div>
+                    <div className="space-y-2 max-h-60 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800">
+                      {existingSessions.map((session) => (
+                        <div
+                          key={session.sessionId}
+                          onClick={() => joinExistingSession(session.sessionId)}
+                          className="p-3 bg-[#111418] hover:bg-[#1c2126] rounded-lg cursor-pointer border border-[#3c4753] hover:border-[#1978e5] transition-all duration-200"
+                        >
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                              <div className="text-white font-medium text-sm">
+                                Session {session.sessionId.slice(0, 8)}...
+                              </div>
+                              <div className="text-gray-400 text-xs mt-1">
+                                Created: {formatSessionDate(session.createdAt)}
+                              </div>
+                              {session.lastMessage && (
+                                <div className="text-gray-300 text-xs mt-1 truncate">
+                                  Last: "{session.lastMessage.slice(0, 50)}..."
+                                </div>
+                              )}
+                            </div>
+                            <div className="text-gray-500 text-xs">
+                              {session.messageCount || 0} messages
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* PDF Panel */}
+            {showPdfs && session && (
+              <div className="mx-4 sm:mx-10 md:mx-20 lg:mx-40 mt-4 bg-[#293038] rounded-lg p-6 border border-[#3c4753]">
+                <h3 className="text-white text-lg font-bold mb-4 flex items-center gap-2">
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6z" clipRule="evenodd" />
+                  </svg>
+                  Your Generated PDFs ({userPdfs.length})
+                </h3>
+
+                {userPdfs.length === 0 ? (
+                  <div className="text-center py-8">
+                    <svg className="w-16 h-16 mx-auto mb-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6z" clipRule="evenodd" />
+                    </svg>
+                    <h4 className="text-white text-lg font-semibold mb-2">No PDFs Generated Yet</h4>
+                    <p className="text-gray-400 mb-4">
+                      Start a conversation with the agent to generate course materials and roadmaps.
+                    </p>
+                    <button
+                      onClick={() => {
+                        setShowPdfs(false);
+                        if (!currentSessionId) {
+                          setShowSessionSelector(true);
+                        }
+                      }}
+                      className="px-4 py-2 bg-[#1978e5] hover:bg-[#1565c0] text-white rounded-lg font-semibold transition-colors duration-200"
+                    >
+                      Start Learning
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {userPdfs.map((pdf) => (
+                      <div
+                        key={pdf.id}
+                        className="p-4 bg-[#111418] rounded-lg border border-[#3c4753] hover:border-[#1978e5] transition-all duration-200"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                              <div className="w-8 h-8 bg-red-100 rounded flex items-center justify-center">
+                                <svg className="w-5 h-5 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6z" clipRule="evenodd" />
+                                </svg>
+                              </div>
+                              <div>
+                                <h4 className="text-white font-semibold">{pdf.filename}</h4>
+                                <div className="flex items-center gap-4 text-sm text-gray-400">
+                                  <span className="capitalize">{pdf.pdfType.replace('_', ' ')}</span>
+                                  <span>•</span>
+                                  <span>{new Date(pdf.uploadDate).toLocaleDateString()}</span>
+                                  <span>•</span>
+                                  <span>{new Date(pdf.uploadDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => downloadPdf(pdf.fileId, pdf.filename)}
+                                className="px-3 py-1.5 bg-[#1978e5] hover:bg-[#1565c0] text-white rounded text-sm font-medium transition-colors duration-200 flex items-center gap-2"
+                              >
+                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
+                                </svg>
+                                Download
+                              </button>
+
+                              <button
+                                onClick={() => {
+                                  // Open PDF in new tab for preview
+                                  const url = `/api/pdfs/${pdf.fileId}`;
+                                  window.open(url, '_blank');
+                                }}
+                                className="px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white rounded text-sm font-medium transition-colors duration-200 flex items-center gap-2"
+                              >
+                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                  <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                                  <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
+                                </svg>
+                                Preview
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+
+                    <div className="pt-4 border-t border-[#3c4753]">
+                      <p className="text-gray-400 text-sm mb-2">
+                        📄 <strong>Course PDFs:</strong> Detailed learning materials and structured content
+                      </p>
+                      <p className="text-gray-400 text-sm">
+                        🗺️ <strong>Roadmap PDFs:</strong> Step-by-step learning paths and progression guides
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  onClick={() => setShowPdfs(false)}
+                  className="mt-4 px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg text-sm transition-colors duration-200"
+                >
+                  Close PDFs
+                </button>
+              </div>
+            )}
+
+            <div className="px-40 flex flex-1 justify-center py-5">
+              <div className="layout-content-container flex flex-col max-w-[960px] flex-1">
+                <div className="flex flex-wrap justify-between gap-3 p-4">
+                  <p className="text-white tracking-light text-[32px] font-bold leading-tight min-w-72">
+                    SkillUp Agent
+                  </p>
+                  {currentSessionId && (
+                    <span className="text-gray-400 text-sm self-center">
+                      Session: {currentSessionId.slice(0, 8)}...
+                    </span>
+                  )}
+                </div>
+
+                {currentSessionId ? (
+                  <>
+                    {/* Message display area */}
+                    <div className="flex-grow overflow-y-auto space-y-3 min-h-[300px] max-h-[calc(100vh-300px)] scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-gray-800">
+                      {messages.length === 0 ? (
+                        // Welcome message when no messages
+                        <div className="flex gap-3 p-4">
+                          <div className="flex flex-1 flex-col items-stretch gap-2">
+                            <div className="flex flex-col gap-1">
+                              <p className="text-white text-base font-bold leading-tight">Agent</p>
+                              <p className="text-white text-base font-normal leading-normal">
+                                Hi there! I'm here to help you create a personalized skill course. What skills are you interested in learning or improving?
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        messages.map((msg) => (
+                          <div key={msg.id} className="flex gap-3 p-4">
+                            <div className="flex flex-1 flex-col items-stretch gap-2">
+                              <div className="flex flex-col gap-1">
+                                <p className="text-white text-base font-bold leading-tight">
+                                  {msg.sender === 'user' ? 'User' : 'Agent'}
+                                </p>
+                                <p className={`text-white text-base font-normal leading-normal whitespace-pre-wrap ${msg.isError ? 'text-red-400' : ''
+                                  }`}>
+                                  {msg.text}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                      <div ref={messagesEndRef} />
+                    </div>
+
+                    <div className="flex max-w-full w-full flex-wrap items-end gap-4 px-4 py-3">
+                      <label className="flex flex-col min-w-40 flex-1">
+                        <textarea
+                          id="message-input"
+                          ref={textareaRef}
+                          placeholder="Type your message..."
+                          value={message}
+                          onChange={handleInputChange}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                              e.preventDefault();
+                              handleSendMessage();
+                            }
+                          }}
+                          className="form-input resize-none flex w-full min-w-0 flex-1 overflow-hidden rounded-xl text-white focus:outline-0 focus:ring-0 border border-[#3c4753] bg-[#1c2126] focus:border-[#3c4753] h-14 placeholder:text-[#9daab8] p-[15px] text-base font-normal leading-normal"
+                          rows={1}
+                        />
+                      </label>
+                      <button
+                        onClick={handleSendMessage}
+                        className="flex min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-full h-14 px-6 bg-[#1978e5] text-white text-sm font-bold leading-normal tracking-[0.015em]"
+                      >
+                        <span className="truncate">Send</span>
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  /* Welcome screen when no session is selected */
+                  <div className="flex-grow flex items-center justify-center">
+                    <div className="text-center max-w-md">
+                      <svg className="w-16 h-16 mx-auto mb-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                      </svg>
+                      <h3 className="text-white text-xl font-semibold mb-2">Welcome to SkillUp!</h3>
+                      <p className="text-gray-400 mb-6">
+                        {existingSessions.length > 0
+                          ? "Choose an existing session to continue or start a new one to begin learning."
+                          : "Start your first learning session to get personalized skill recommendations and courses."
+                        }
+                      </p>
+                      <button
+                        onClick={() => setShowSessionSelector(true)}
+                        className="px-6 py-3 bg-[#1978e5] hover:bg-[#1565c0] text-white rounded-lg font-semibold transition-colors duration-200"
+                      >
+                        Get Started
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div> {/* End Main Layout Container */}
         </div>
       </div>
     </div>
   );
-}
+};
+

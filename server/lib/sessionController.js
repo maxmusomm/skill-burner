@@ -56,11 +56,36 @@ const getSessionMessages = async (sessionId) => {
         const sessionsCollection = getDB().collection('sessions');
         const session = await sessionsCollection.findOne({ sessionId });
 
-        return session ? session.messages : [];
+        if (!session || !session.messages) {
+            return [];
+        }
+
+        // Transform database message format to client-expected format
+        return session.messages.map((msg, index) => ({
+            id: msg.id || `${sessionId}_${index}_${msg.timestamp?.getTime() || Date.now()}`,
+            text: msg.msg || msg.text || '',
+            sender: msg.by || msg.sender || 'unknown',
+            timestamp: msg.timestamp ? (typeof msg.timestamp === 'string' ? msg.timestamp : msg.timestamp.toISOString()) : new Date().toISOString(),
+            isError: msg.isError || false
+        }));
     } catch (error) {
         console.error('Error getting session messages:', error);
         throw error;
     }
 };
 
-module.exports = { createOrGetSession, addMessageToSession, getSessionMessages };
+const getUserSessions = async (userId) => {
+    try {
+        const sessionsCollection = getDB().collection('sessions');
+        const sessions = await sessionsCollection.find({ userId })
+            .sort({ lastActivity: -1 })
+            .toArray();
+
+        return sessions;
+    } catch (error) {
+        console.error('Error getting user sessions:', error);
+        throw error;
+    }
+};
+
+module.exports = { createOrGetSession, addMessageToSession, getSessionMessages, getUserSessions };
