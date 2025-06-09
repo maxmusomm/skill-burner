@@ -88,4 +88,16 @@ const getUserSessions = async (userId) => {
     }
 };
 
-module.exports = { createOrGetSession, addMessageToSession, getSessionMessages, getUserSessions };
+const deleteSessionFromDB = async (sessionId, userId) => {
+    try {
+        const sessionsCollection = getDB().collection('sessions');
+        const result = await sessionsCollection.deleteOne({ sessionId, userId });
+        console.log('Session deleted from DB:', sessionId, 'for user:', userId, 'result:', result);
+        return result;
+    } catch (error) {
+        console.error('Error deleting session from DB:', error);
+        throw error;
+    }
+};
+
+module.exports = { createOrGetSession, addMessageToSession, getSessionMessages, getUserSessions, deleteSessionFromDB };

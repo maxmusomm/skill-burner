@@ -1,13 +1,13 @@
 # --- Imports ---
+import os # Added import
 from google.adk.agents import LlmAgent, SequentialAgent, LoopAgent
 from google.adk.tools import google_search, ToolContext, FunctionTool, agent_tool
-from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset, StdioServerParameters
 from weasyprint import HTML
 from . import instructions
 from io import BytesIO
 import gridfs
 from pymongo import MongoClient
-from datetime import datetime
+#from datetime import datetime
 
 # --- Constants and Configuration ---
 APP_NAME = "SkillConsultantAgent"
@@ -27,18 +27,9 @@ GEMINI_MODEL_flash = "gemini-2.0-flash-lite"
 
 
 # --- MongoDB Setup for PDF Storage ---
-mongo_client = MongoClient("mongodb://localhost:27017")
+mongo_client = MongoClient(os.getenv("MONGO_DB_URI", "mongodb://localhost:27017")) # Changed from localhost
 mongo_db = mongo_client["skill-burner"]
 fs = gridfs.GridFS(mongo_db, collection='pdfs')
-
-
-# --- Tool Definitions ---
-mongodb_toolset = MCPToolset(connection_params=StdioServerParameters(command="npx", args=[
-    "-y",
-    "mongodb-mcp-server",
-    "--connectionString", "mongodb://localhost:27017/skill-burner",
-   
-]))
 
 
 # Tool: exit_loop
@@ -94,7 +85,7 @@ def html_to_pdf_course(html_content: str, course_name:str, user_id: str, session
         userId=user_id,
         sessionId=session_id,
         content_type="application/pdf",
-        upload_date=datetime.utcnow(),
+        #upload_date=datetime.utcnow(),
         pdf_type="course"
     )
     
@@ -105,7 +96,7 @@ def html_to_pdf_course(html_content: str, course_name:str, user_id: str, session
         "sessionId": session_id,
         "filename": f"{course_name}.pdf",
         "pdf_type": "course",
-        "upload_date": datetime.utcnow(),
+        #"upload_date": datetime.utcnow(),
         "content_type": "application/pdf"
     })
     
@@ -158,7 +149,7 @@ Create search queries that cover these essential categories:
 8. **Tools & Resources**: Software, platforms, or materials needed
 
 ### Query Formulation Rules
-- **Be Specific**: Include skill level qualifiers (e.g., "beginner", "step-by-step", "complete guide")
+- **Be Specific**: Include skill level qualifiers (e.g., "beginner", "step by step", "complete guide")
 - **Target Quality**: Use terms like "best", "comprehensive", "complete", "practical"
 - **Consider Format**: Include format preferences from user profile (e.g., "video tutorial", "interactive course")
 - **Include Context**: Add relevant context from user's motivation/goals
@@ -822,7 +813,7 @@ Final document must include:
 - Add interactive elements like checkboxes for progress tracking
 
 ### 3. PDF Generation
-- Call `html_to_pdf` tool with complete HTML string
+- Call `html_to_pdf_course` tool with complete HTML string
 - Return the exact output path provided by the tool
 - Ensure successful conversion with proper formatting
 
@@ -1026,7 +1017,6 @@ If any are unclear, ask targeted follow-up questions.
 
 ## Tools:
 - `set_set_session_data_tool`: Saves drafted_points_text to session state
-- `mongodb_mcp_toolset`: MongoDB access for sessions collection using session_id
             ''',
-    sub_agents=[skill_learning_agent_team],    tools=[set_set_session_data_tool, mongodb_toolset],
+    sub_agents=[skill_learning_agent_team],    tools=[set_set_session_data_tool],
 )

@@ -1,7 +1,9 @@
 const { MongoClient } = require('mongodb');
+const dotenv = require('dotenv');
+dotenv.config();
 
-const mongodbURI = 'mongodb://localhost:27017';
-const dbName = 'skill-burner';
+const mongodbURI = process.env.MONGO_DB_URI || 'mongodb://localhost:27017';
+const dbName = process.env.MONGO_DB_NAME || 'skill-burner';
 
 let mongoClient;
 let mongoDB;

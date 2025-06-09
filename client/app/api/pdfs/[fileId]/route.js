@@ -2,8 +2,8 @@ import { auth } from "@/auth"
 import { NextResponse } from "next/server"
 import { MongoClient, GridFSBucket, ObjectId } from "mongodb"
 
-const MONGO_URI = "mongodb://localhost:27017"
-const DB_NAME = "skill-burner"
+const MONGO_URI = process.env.NEXT_PUBLIC_MONGO_URI || "mongodb://localhost:27017"
+const DB_NAME = process.env.NEXT_PUBLIC_MONGO_DB_NAME || "skill-burner"
 
 let cachedClient = null
 

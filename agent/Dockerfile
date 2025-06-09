@@ -2,8 +2,8 @@ FROM python:3.13-alpine
 
 WORKDIR /app
 
-# Install system dependencies required for WeasyPrint
-RUN apk add weasyprint
+# Install system dependencies required for WeasyPrint and fonts
+RUN apk add --update weasyprint ttf-dejavu tzdata
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
@@ -12,4 +12,4 @@ COPY . .
 
 EXPOSE 8000
 
-CMD adk api_server
+CMD fastapi dev main.py --host 0.0.0.0 --port 8000

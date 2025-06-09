@@ -3,6 +3,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
 import { signOut } from "next-auth/react";
 import { useSession } from "next-auth/react";
+import Sidebar from "./components/Sidebar";
 
 export default function SkillBurnPage() {
   const { data: session, status } = useSession();
@@ -19,7 +20,8 @@ export default function SkillBurnPage() {
   const [showSessionSelector, setShowSessionSelector] = useState(false); // Toggle for session selector
   const [userPdfs, setUserPdfs] = useState([]); // Track user's PDFs
   const [showPdfs, setShowPdfs] = useState(false); // Toggle for PDF dropdown
-  const [showSidebar, setShowSidebar] = useState(false); // Toggle for sidebar
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const sidebarWidth = 320; // Corresponds to w-80 in Tailwind CSS (80 * 4px)
 
   // Fetch user statistics
   const fetchUserStats = async () => {
@@ -112,11 +114,6 @@ export default function SkillBurnPage() {
         console.log("User processed successfully:", response.user);
         console.log("Existing sessions:", response.existingSessions);
         setExistingSessions(response.existingSessions || []);
-
-        // If user has existing sessions, show sidebar instead of auto-creating
-        if (response.existingSessions && response.existingSessions.length > 0) {
-          setShowSidebar(true);
-        }
         // Don't automatically create a session anymore - user will choose
       } else {
         console.error("Error processing user:", response.error);
@@ -129,7 +126,6 @@ export default function SkillBurnPage() {
       setMessages(response.messages || []); // Load existing messages
       setCurrentSessionId(response.session.sessionId);
       setShowSessionSelector(false); // Hide session selector after creating session
-      setShowSidebar(false); // Hide sidebar on mobile after session created
     });
 
     newSocket.on('session_joined', (response) => {
@@ -139,7 +135,6 @@ export default function SkillBurnPage() {
         setMessages(response.messages || []); // Load existing messages
         setCurrentSessionId(response.session.sessionId);
         setShowSessionSelector(false); // Hide session selector after joining session
-        setShowSidebar(false); // Hide sidebar on mobile after session joined
       } else {
         console.error("Error joining session: Invalid response format", response);
       }
@@ -278,6 +273,7 @@ export default function SkillBurnPage() {
     if (socket) {
       console.log("Creating new session...");
       socket.emit("create_session");
+      setIsSidebarOpen(false); // Close sidebar when new chat is created
     }
   };
 
@@ -285,6 +281,7 @@ export default function SkillBurnPage() {
     if (socket && sessionId) {
       console.log("Joining session:", sessionId);
       socket.emit("join_session", { sessionId });
+      setIsSidebarOpen(false); // Close sidebar when session is selected
     }
   };
 
@@ -316,299 +313,213 @@ export default function SkillBurnPage() {
         </div>
       )}
 
-      <div className="layout-container flex h-full grow flex-col">
-        <header className="sticky top-0 z-30 bg-[#111418] flex items-center justify-between whitespace-nowrap border-b border-solid border-b-[#293038] px-4 sm:px-10 py-3">
-          <div className="flex items-center gap-4 text-white">
-            {/* Hamburger Menu Button */}
-            <button
-              onClick={() => setShowSidebar(!showSidebar)}
-              className="p-2 hover:bg-[#293038] rounded-lg transition-colors duration-200 lg:hidden"
-              title="Toggle Sessions"
-            >
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
-              </svg>
-            </button>
+      {/* Sidebar is now part of the main layout flow for the push animation */}
+      {/* The Sidebar component itself will handle its fixed positioning and visibility */}
 
-            <div className="size-4">
-              <svg
-                viewBox="0 0 48 48"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  d="M24 4C25.7818 14.2173 33.7827 22.2182 44 24C33.7827 25.7818 25.7818 33.7827 24 44C22.2182 33.7827 14.2173 25.7818 4 24C14.2173 22.2182 22.2182 14.2173 24 4Z"
-                  fill="currentColor"
-                ></path>
-              </svg>
-            </div>
-            <h2 className="text-white text-lg font-bold leading-tight tracking-[-0.015em]">
-              SkillUp
-            </h2>
+      {/* Main Layout Container - This will shift based on sidebar state */}
+      <div
+        className={`flex flex-1 h-full transition-all duration-300 ease-in-out`}
+        style={{
+          paddingLeft: isSidebarOpen ? `${sidebarWidth}px` : '0px',
+        }}
+      >
+        {/* Sidebar Component */}
+        {/* The Sidebar component needs to be aware of its width to correctly offset itself when closed */}
+        <Sidebar
+          isOpen={isSidebarOpen}
+          onClose={() => setIsSidebarOpen(false)}
+          onNewChatClick={createNewSession}
+          width={sidebarWidth} // Pass width to Sidebar
+        >
+          <div className="p-4">
+            <h3 className="text-white text-lg font-semibold mb-4">Your Sessions</h3>
+            {existingSessions.length > 0 ? (
+              <ul className="space-y-2">
+                {existingSessions.map((session) => (
+                  <li key={session.sessionId}
+                    className="p-3 bg-[#293038] rounded-lg hover:bg-[#3c4753] cursor-pointer transition-colors duration-150"
+                    onClick={() => joinExistingSession(session.sessionId)}>
+                    <div className="text-sm text-gray-300">
+                      Session ID: {session.sessionId.substring(0, 8)}...
+                    </div>
+                    <div className="text-xs text-gray-400">
+                      Created: {formatSessionDate(session.createdAt)}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-gray-400">No existing sessions. Start a new chat!</p>
+            )}
           </div>
-          <div className="flex flex-1 justify-end gap-8">
-            {session ? (
-              <>
-                {/* Sidebar Toggle Button for Desktop */}
-                <button
-                  onClick={() => setShowSidebar(!showSidebar)}
-                  className="hidden lg:flex items-center justify-center p-2 hover:bg-[#293038] rounded-lg transition-colors duration-200"
-                  title="Toggle Sessions"
+        </Sidebar>
+
+        {/* Chat Interface Container - This is what gets "pushed" */}
+        <div className="layout-container flex h-full grow flex-col w-full">
+          <header className="sticky top-0 z-20 bg-[#111418] flex items-center justify-between whitespace-nowrap border-b border-solid border-b-[#293038] px-4 sm:px-10 py-3">
+            {/* Hamburger button is now part of the main content's header */}
+            <div className="flex items-center gap-4 text-white">
+              <button
+                onClick={() => setIsSidebarOpen(true)}
+                className={`p-2 hover:bg-[#293038] rounded-lg transition-all duration-300 ease-in-out ${isSidebarOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
+                title="Open Sessions"
+              >
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
+                </svg>
+              </button>
+
+              <div className="size-4">
+                <svg
+                  viewBox="0 0 48 48"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
                 >
-                  <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
-                  </svg>
-                </button>
+                  <path
+                    d="M24 4C25.7818 14.2173 33.7827 22.2182 44 24C33.7827 25.7818 25.7818 33.7827 24 44C22.2182 33.7827 14.2173 25.7818 4 24C14.2173 22.2182 22.2182 14.2173 24 4Z"
+                    fill="currentColor"
+                  ></path>
+                </svg>
+              </div>
+              <h2 className="text-white text-lg font-bold leading-tight tracking-[-0.015em]">
+                SkillUp
+              </h2>
+            </div>
+            <div className="flex flex-1 justify-end gap-8">
+              {session ? (
+                <>
+                  {/* PDFs Button - Only show when there's an active session */}
+                  {currentSessionId && (
+                    <div className="relative">
+                      <button
+                        onClick={() => setShowPdfs(!showPdfs)}
+                        className="flex max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-full h-10 bg-[#293038] text-white gap-2 text-sm font-bold leading-normal tracking-[0.015em] min-w-0 px-2.5"
+                        title="View your generated PDFs"
+                      >
+                        <div className="text-white">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="20px" height="20px" fill="currentColor" viewBox="0 0 256 256">
+                            <path d="M224,152a8,8,0,0,1-8,8H192v16a8,8,0,0,1-8,8H40a8,8,0,0,1-8-8V56a8,8,0,0,1,8-8H72V32a8,8,0,0,1,8-8H216a8,8,0,0,1,8,8Zm-40-8V48H88V160H184Z" />
+                          </svg>
+                        </div>
+                        {userPdfs.length > 0 && (
+                          <span className="bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                            {userPdfs.length}
+                          </span>
+                        )}
+                      </button>
 
-                {/* PDFs Button - Only show when there's an active session */}
-                {currentSessionId && (
-                  <div className="relative">
-                    <button
-                      onClick={() => setShowPdfs(!showPdfs)}
-                      className="flex max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-full h-10 bg-[#293038] text-white gap-2 text-sm font-bold leading-normal tracking-[0.015em] min-w-0 px-2.5"
-                      title="View your generated PDFs"
-                    >
-                      <div className="text-white">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20px" height="20px" fill="currentColor" viewBox="0 0 256 256">
-                          <path d="M224,152a8,8,0,0,1-8,8H192v16a8,8,0,0,1-8,8H40a8,8,0,0,1-8-8V56a8,8,0,0,1,8-8H72V32a8,8,0,0,1,8-8H216a8,8,0,0,1,8,8Zm-40-8V48H88V160H184Z" />
-                        </svg>
-                      </div>
-                      {userPdfs.length > 0 && (
-                        <span className="bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                          {userPdfs.length}
-                        </span>
-                      )}
-                    </button>
-
-                    {/* PDF Dropdown */}
-                    {showPdfs && (
-                      <div className="absolute right-0 top-12 w-80 bg-[#293038] rounded-lg shadow-lg border border-[#3c4753] z-50 max-h-96 overflow-y-auto">
-                        <div className="p-4">
-                          <h3 className="text-white text-lg font-bold mb-4 flex items-center gap-2">
-                            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6z" clipRule="evenodd" />
-                            </svg>
-                            Your Generated PDFs ({userPdfs.length})
-                          </h3>
-
-                          {userPdfs.length === 0 ? (
-                            <div className="text-center py-8">
-                              <svg className="w-16 h-16 mx-auto mb-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                      {/* PDF Dropdown */}
+                      {showPdfs && (
+                        <div className="absolute right-0 top-12 w-80 bg-[#293038] rounded-lg shadow-lg border border-[#3c4753] z-50 max-h-96 overflow-y-auto">
+                          <div className="p-4">
+                            <h3 className="text-white text-lg font-bold mb-4 flex items-center gap-2">
+                              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                                 <path fillRule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6z" clipRule="evenodd" />
                               </svg>
-                              <h4 className="text-white text-lg font-semibold mb-2">No PDFs Generated Yet</h4>
-                              <p className="text-gray-400 mb-4">
-                                Start a conversation with the agent to generate course materials and roadmaps.
-                              </p>
-                            </div>
-                          ) : (
-                            <div className="space-y-3">
-                              {userPdfs.map((pdf) => (
-                                <div
-                                  key={pdf.id}
-                                  className="p-3 bg-[#111418] rounded-lg border border-[#3c4753] hover:border-[#1978e5] transition-all duration-200"
-                                >
-                                  <div className="flex items-center justify-between">
-                                    <div className="flex-1">
-                                      <div className="flex items-center gap-3 mb-2">
-                                        <div className="w-8 h-8 bg-red-100 rounded flex items-center justify-center">
-                                          <svg className="w-5 h-5 text-red-600" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fillRule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6z" clipRule="evenodd" />
-                                          </svg>
-                                        </div>
-                                        <div>
-                                          <h4 className="text-white font-semibold">{pdf.filename}</h4>
-                                          <div className="flex items-center gap-4 text-sm text-gray-400">
-                                            <span className="capitalize">{pdf.pdfType.replace('_', ' ')}</span>
-                                            <span>•</span>
-                                            <span>{new Date(pdf.uploadDate).toLocaleDateString()}</span>
-                                            <span>•</span>
-                                            <span>{new Date(pdf.uploadDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                              Your Generated PDFs ({userPdfs.length})
+                            </h3>
+
+                            {userPdfs.length === 0 ? (
+                              <div className="text-center py-8">
+                                <svg className="w-16 h-16 mx-auto mb-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6z" clipRule="evenodd" />
+                                </svg>
+                                <h4 className="text-white text-lg font-semibold mb-2">No PDFs Generated Yet</h4>
+                                <p className="text-gray-400 mb-4">
+                                  Start a conversation with the agent to generate course materials and roadmaps.
+                                </p>
+                              </div>
+                            ) : (
+                              <div className="space-y-3">
+                                {userPdfs.map((pdf) => (
+                                  <div
+                                    key={pdf.id}
+                                    className="p-3 bg-[#111418] rounded-lg border border-[#3c4753] hover:border-[#1978e5] transition-all duration-200"
+                                  >
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex-1">
+                                        <div className="flex items-center gap-3 mb-2">
+                                          <div className="w-8 h-8 bg-red-100 rounded flex items-center justify-center">
+                                            <svg className="w-5 h-5 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+                                              <path fillRule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6z" clipRule="evenodd" />
+                                            </svg>
+                                          </div>
+                                          <div>
+                                            <h4 className="text-white font-semibold">{pdf.filename}</h4>
+                                            <div className="flex items-center gap-4 text-sm text-gray-400">
+                                              <span className="capitalize">{pdf.pdfType.replace('_', ' ')}</span>
+                                              <span>•</span>
+                                              <span>{new Date(pdf.uploadDate).toLocaleDateString()}</span>
+                                              <span>•</span>
+                                              <span>{new Date(pdf.uploadDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                            </div>
                                           </div>
                                         </div>
                                       </div>
-                                    </div>
-                                    <div className="flex gap-2">
-                                      <button
-                                        onClick={() => downloadPdf(pdf.fileId, pdf.filename)}
-                                        className="px-3 py-1.5 bg-[#1978e5] hover:bg-[#1565c0] text-white rounded text-sm font-medium transition-colors duration-200 flex items-center gap-2"
-                                      >
-                                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                          <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
-                                        </svg>
-                                        Download
-                                      </button>
+                                      <div className="flex gap-2">
+                                        <button
+                                          onClick={() => downloadPdf(pdf.fileId, pdf.filename)}
+                                          className="px-3 py-1.5 bg-[#1978e5] hover:bg-[#1565c0] text-white rounded text-sm font-medium transition-colors duration-200 flex items-center gap-2"
+                                        >
+                                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
+                                          </svg>
+                                          Download
+                                        </button>
 
-                                      <button
-                                        onClick={() => {
-                                          // Open PDF in new tab for preview
-                                          const url = `/api/pdfs/${pdf.fileId}`;
-                                          window.open(url, '_blank');
-                                        }}
-                                        className="px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white rounded text-sm font-medium transition-colors duration-200 flex items-center gap-2"
-                                      >
-                                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                          <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
-                                          <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
-                                        </svg>
-                                        Preview
-                                      </button>
+                                        <button
+                                          onClick={() => {
+                                            // Open PDF in new tab for preview
+                                            const url = `/api/pdfs/${pdf.fileId}`;
+                                            window.open(url, '_blank');
+                                          }}
+                                          className="px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white rounded text-sm font-medium transition-colors duration-200 flex items-center gap-2"
+                                        >
+                                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                            <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                                            <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
+                                          </svg>
+                                          Preview
+                                        </button>
+                                      </div>
                                     </div>
                                   </div>
+                                ))}
+
+                                <div className="pt-4 border-t border-[#3c4753]">
+                                  <p className="text-gray-400 text-sm mb-2">
+                                    📄 <strong>Course PDFs:</strong> Detailed learning materials and structured content
+                                  </p>
                                 </div>
-                              ))}
-
-                              <div className="pt-4 border-t border-[#3c4753]">
-                                <p className="text-gray-400 text-sm mb-2">
-                                  📄 <strong>Course PDFs:</strong> Detailed learning materials and structured content
-                                </p>
-                                <p className="text-gray-400 text-sm">
-                                  🗺️ <strong>Roadmap PDFs:</strong> Step-by-step learning paths and progression guides
-                                </p>
                               </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* User Profile */}
-                <div
-                  className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 cursor-pointer"
-                  style={{ backgroundImage: `url("${session.user?.image}")` }}
-                  onClick={() => signOut()}
-                  title={`Sign out ${session.user?.name}`}
-                />
-              </>
-            ) : (
-              <button
-                onClick={() => window.location.href = '/login'}
-                className="flex min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-full h-10 px-4 bg-[#1978e5] text-white text-sm font-bold leading-normal tracking-[0.015em]"
-              >
-                <span className="truncate">Sign In</span>
-              </button>
-            )}
-          </div>
-        </header>
-
-        {/* Main Layout Container */}
-        <div className="flex flex-1 h-full relative">
-          {/* Sidebar for Sessions */}
-          <div className={`scrollbar-whatsapp-container fixed inset-y-0 left-0 z-50 w-80 bg-[#111b21] border-r border-[#313d44] transform transition-transform duration-300 ease-in-out lg:relative lg:transform-none lg:flex lg:w-80 ${showSidebar ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
-            {/* Desktop Header */}
-            <div className="hidden lg:flex items-center justify-between p-4 bg-[#202c33] border-b border-[#313d44]">
-              <h2 className="text-[#e9edef] font-semibold text-lg">Chats</h2>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setShowSidebar(false)}
-                  className="p-2 hover:bg-[#374045] rounded-full transition-colors duration-200"
-                  title="Close Sidebar"
-                >
-                  <svg className="w-5 h-5 text-[#8696a0]" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-
-            {/* Mobile Header */}
-            <div className="flex lg:hidden items-center justify-between p-4 bg-[#202c33] border-b border-[#313d44]">
-              <h2 className="text-[#e9edef] font-semibold text-lg">Chats</h2>
-              <button
-                onClick={() => setShowSidebar(false)}
-                className="p-2 hover:bg-[#374045] rounded-full transition-colors duration-200"
-              >
-                <svg className="w-5 h-5 text-[#8696a0]" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                </svg>
-              </button>
-            </div>
-
-            {/* Sessions List */}
-            <div className="flex-1 overflow-y-auto pb-20 scrollbar-whatsapp">
-              {existingSessions.length === 0 ? (
-                <div className="text-center py-16 px-6">
-                  <svg className="w-16 h-16 mx-auto mb-4 text-[#8696a0]" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M20 2H4a2 2 0 00-2 2v12a2 2 0 002 2h4l3 3 3-3h6a2 2 0 002-2V4a2 2 0 00-2-2z" />
-                  </svg>
-                  <p className="text-[#8696a0] text-sm">No chats yet</p>
-                  <p className="text-[#667781] text-xs mt-1">Start your first conversation</p>
-                </div>
-              ) : (
-                <div className="py-2">
-                  {existingSessions.map((sessionItem) => (
-                    <div
-                      key={sessionItem.sessionId}
-                      onClick={() => joinExistingSession(sessionItem.sessionId)}
-                      className={`px-4 py-3 cursor-pointer transition-colors duration-200 hover:bg-[#202c33] border-l-4 ${currentSessionId === sessionItem.sessionId
-                        ? 'bg-[#202c33] border-l-[#00a884]'
-                        : 'border-l-transparent'
-                        }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        {/* Avatar */}
-                        <div className="w-12 h-12 bg-[#00a884] rounded-full flex items-center justify-center flex-shrink-0">
-                          <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
-                          </svg>
-                        </div>
-
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between">
-                            <div className="font-medium text-[#e9edef] text-sm truncate">
-                              Session {sessionItem.sessionId.slice(0, 8)}
-                            </div>
-                            <div className="text-[#8696a0] text-xs ml-2">
-                              {formatSessionDate(sessionItem.createdDate)}
-                            </div>
-                          </div>
-                          {sessionItem.lastMessage && (
-                            <div className="text-[#8696a0] text-sm mt-1 truncate">
-                              {sessionItem.lastMessage.slice(0, 45)}...
-                            </div>
-                          )}
-                          <div className="flex items-center justify-between mt-1">
-                            <span className="text-[#667781] text-xs">
-                              {sessionItem.messageCount || 0} messages
-                            </span>
-                            {currentSessionId === sessionItem.sessionId && (
-                              <div className="w-2 h-2 bg-[#00a884] rounded-full"></div>
                             )}
                           </div>
                         </div>
-                      </div>
+                      )}
                     </div>
-                  ))}
-                </div>
+                  )}
+
+                  {/* User Profile */}
+                  <div
+                    className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 cursor-pointer"
+                    style={{ backgroundImage: `url("${session.user?.image}")` }}
+                    onClick={() => signOut()}
+                    title={`Sign out ${session.user?.name}`}
+                  />
+                </>
+              ) : (
+                <button
+                  onClick={() => window.location.href = '/login'}
+                  className="flex min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-full h-10 px-4 bg-[#1978e5] text-white text-sm font-bold leading-normal tracking-[0.015em]"
+                >
+                  <span className="truncate">Sign In</span>
+                </button>
               )}
             </div>
+          </header>
 
-            {/* Sticky New Session Button */}
-            <div className="absolute bottom-4 left-4 right-4 z-10">
-              <button
-                onClick={createNewSession}
-                className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-[#00a884] hover:bg-[#017561] text-white rounded-full font-medium transition-all duration-200 shadow-lg"
-              >
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" />
-                </svg>
-                New Chat
-              </button>
-            </div>
-          </div>
-
-          {/* Sidebar Overlay for Mobile */}
-          {showSidebar && (
-            <div
-              className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
-              onClick={() => setShowSidebar(false)}
-            />
-          )}
-
-          {/* Main Content Area */}
-          <div className="flex-1 flex lg:ml-0">
+          {/* Main Content Area (Chat messages, input, etc.) */}
+          <main className="flex flex-1 flex-col overflow-y-auto bg-[#0b1014]">
             {/* Session Selector */}
             {showSessionSelector && session && (
               <div className="mx-4 sm:mx-10 md:mx-20 lg:mx-40 mt-4 bg-[#293038] rounded-lg p-6 border border-[#3c4753]">
@@ -878,7 +789,7 @@ export default function SkillBurnPage() {
                 )}
               </div>
             </div>
-          </div> {/* End Main Layout Container */}
+          </main>
         </div>
       </div>
     </div>

@@ -53,6 +53,10 @@ async def create_session_endpoint(app_name: str, user_id: str, session_id: str, 
     )
     return session
 
+@app.delete("/apps/{app_name}/users/{user_id}/sessions/{session_id}")
+async def delete_session_endpoint(app_name: str, user_id: str, session_id: str) -> None:
+    await session_service.delete_session(app_name=app_name, user_id=user_id, session_id=session_id)
+
 @app.post("/run")
 async def run_agent_endpoint(request_body: RunRequest) -> List[Dict[str, Any]]: # Return type changed
     runner = Runner(agent=root_agent, session_service=session_service, app_name=request_body.app_name) # Use app_name from request
@@ -60,7 +64,7 @@ async def run_agent_endpoint(request_body: RunRequest) -> List[Dict[str, Any]]: 
     user_message_text = ""
     if request_body.new_message.parts:
         # Assuming the first part contains the text, as per server.js structure
-        user_message_text = request_body.new_message.parts[0].text or ""
+        user_message_text: str = request_body.new_message.parts[0].text or ""
 
     user_content = types.Content(
         role=request_body.new_message.role,
@@ -120,6 +124,8 @@ async def run_agent_endpoint(request_body: RunRequest) -> List[Dict[str, Any]]: 
         response_events.append(event_dict)
     
     return response_events
+
+
     
 # async def main_async() -> None:
 #     session: Session = await create_session_endpoint('max', 'server User', 'session1', SessionRequest(state={"user_id": "server User", "session_id": "session1","user_name": "mko"}))

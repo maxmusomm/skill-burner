@@ -5,16 +5,36 @@ services:
     build: ./client
     ports:
       - "3000:3000"
+    environment:
+      NEXT_PUBLIC_MONGO_URI: mongodb://mongodb:27017
+      NEXT_PUBLIC_MONGO_DB_NAME: skill-burner
+      NEXT_PUBLIC_SOCKET_IO_URL: http://server:9000
   server:
     depends_on:
       - agent
+      - mongodb
     build: ./server
     ports:
       - "9000:9000"
+    environment:
+      MONGO_DB_URI: mongodb://mongodb:27017
+      MONGO_DB_NAME: skill-burner
+      AGENT_API_URL: http://agent:8000
   agent:
     build: ./agent
     environment:
       GOOGLE_GENAI_USE_VERTEXAI: FALSE
-      GOOGLE_API_KEY: AIzaSyA9DnpmNixJ-w0y1JkfJr5ltwm2HEqj1pE
+      GOOGLE_API_KEY: <Enter gemini api key here>
+      MONGO_DB_URI: mongodb://mongodb:27017
     ports:
       - "8000:8000"
+    depends_on:
+      - mongodb
+  mongodb:
+    image: mongodb/mongodb-community-server:latest
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+volumes:
+  mongodb_data:

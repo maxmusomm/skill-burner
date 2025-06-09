@@ -4,11 +4,10 @@ const axios = require('axios');
 const generateUniqueId = require('generate-unique-id');
 const { connectToMongoDB, getDB } = require('./lib/db');
 const { createOrUpdateUser } = require('./lib/userController');
-const { createOrGetSession, addMessageToSession, getSessionMessages, getUserSessions } = require('./lib/sessionController');
-const { createAgentSession } = require('./lib/agentController');
-
-
-const db = []; // This in-memory db can be removed if not needed for backward compatibility
+const { createOrGetSession, addMessageToSession, getSessionMessages, getUserSessions, deleteSessionFromDB } = require('./lib/sessionController');
+const { createAgentSession, deleteAgentSession } = require('./lib/agentController');
+const dotenv = require('dotenv');
+dotenv.config();
 
 // MongoDB connection
 connectToMongoDB().catch(error => {
@@ -22,6 +21,9 @@ const io = new Server(httpServer, {
         origin: '*',
     },
 });
+
+// Agent API URL
+const AGENT_API_URL = process.env.AGENT_API_URL || 'http://localhost:8000';
 
 io.on('connection', (socket) => {
     console.log('Client connected:', socket.id);
@@ -193,8 +195,7 @@ io.on('connection', (socket) => {
             sender: 'user',
             timestamp: new Date().toISOString()
         };
-        db.push(userMessage);
-        console.log('Stored user message in memory:', userMessage);
+        console.log('User message (formerly in-memory):', userMessage);
 
         // Broadcast the new user message to all clients
         io.to(currentSessionId).emit('new_message', userMessage);
@@ -212,7 +213,8 @@ io.on('connection', (socket) => {
 
             console.log('Sending POST request to API with payload:', payload);
 
-            const response = await axios.post('http://localhost:8000/run', payload, {
+
+            const response = await axios.post(`${AGENT_API_URL}/run`, payload, {
                 headers: {
                     'Content-Type': 'application/json',
                 },
@@ -279,8 +281,7 @@ io.on('connection', (socket) => {
                     };
 
                     // Store agent message in memory
-                    db.push(agentMessage);
-                    console.log('Stored agent message in memory:', agentMessage);
+                    console.log('Agent message (formerly in-memory):', agentMessage);
 
                     // Broadcast the agent response to all clients
                     io.to(currentSessionId).emit('new_message', agentMessage);
@@ -296,7 +297,6 @@ io.on('connection', (socket) => {
                     isError: true,
                     timestamp: new Date().toISOString()
                 };
-                db.push(errorMessage);
                 io.to(currentSessionId).emit('new_message', errorMessage);
             }
 
@@ -319,7 +319,6 @@ io.on('connection', (socket) => {
                     isError: true,
                     timestamp: new Date().toISOString()
                 };
-                db.push(errorMessage);
                 io.to(currentSessionId).emit('new_message', errorMessage);
             } else if (error.request) {
                 console.error('Request:', error.request);
@@ -332,7 +331,6 @@ io.on('connection', (socket) => {
                     isError: true,
                     timestamp: new Date().toISOString()
                 };
-                db.push(errorMessage);
                 io.to(currentSessionId).emit('new_message', errorMessage);
             } else {
                 console.error('Error message:', error.message);
@@ -345,9 +343,51 @@ io.on('connection', (socket) => {
                     isError: true,
                     timestamp: new Date().toISOString()
                 };
-                db.push(errorMessage);
                 io.to(currentSessionId).emit('new_message', errorMessage);
             }
+        }
+    });
+
+    socket.on('delete_session', async (data) => {
+        console.log('Delete session requested for sessionId:', data.sessionId);
+
+        if (!currentUser) {
+            socket.emit('session_delete_error', { error: 'User not authenticated' });
+            return;
+        }
+
+        if (!data.sessionId) {
+            socket.emit('session_delete_error', { error: 'Session ID is required for deletion' });
+            return;
+        }
+
+        try {
+            // 1. Delete from Agent
+            await deleteAgentSession(currentUser._id.toString(), data.sessionId);
+            console.log(`Agent session ${data.sessionId} deleted successfully for user ${currentUser._id.toString()}.`);
+
+            // 2. Delete from Server's DB (MongoDB)
+            const deleteDBResult = await deleteSessionFromDB(data.sessionId, currentUser._id);
+            if (deleteDBResult.deletedCount === 0) {
+                console.warn(`Session ${data.sessionId} not found in DB for user ${currentUser._id.toString()} or already deleted.`);
+                // Optionally, still emit success if agent deletion was the primary goal
+            }
+            console.log(`Session ${data.sessionId} deleted from DB for user ${currentUser._id.toString()}.`);
+
+            // 3. If the deleted session was the current one, clear it
+            if (currentSessionId === data.sessionId) {
+                currentSessionId = null;
+                currentAppSessionMongoId = null;
+                console.log('Cleared current session context as it was deleted.');
+            }
+
+            // 4. Notify client of success
+            socket.emit('session_deleted_successfully', { sessionId: data.sessionId });
+            console.log(`Successfully processed delete request for session ${data.sessionId}`);
+
+        } catch (error) {
+            console.error('Error processing delete_session request for session:', data.sessionId, error);
+            socket.emit('session_delete_error', { sessionId: data.sessionId, error: error.message || 'Failed to delete session' });
         }
     });
 });
