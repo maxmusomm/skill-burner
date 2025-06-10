@@ -4,6 +4,7 @@ import { io } from "socket.io-client";
 import { signOut } from "next-auth/react";
 import { useSession } from "next-auth/react";
 import Sidebar from "./components/Sidebar";
+import PdfViewerDialog from "@/components/pdf-viewer-dialog";
 
 export default function SkillBurnPage() {
   const { data: session, status } = useSession();
@@ -19,6 +20,7 @@ export default function SkillBurnPage() {
   const [existingSessions, setExistingSessions] = useState([]); // Track user's existing sessions
   const [showSessionSelector, setShowSessionSelector] = useState(false); // Toggle for session selector
   const [userPdfs, setUserPdfs] = useState([]); // Track user's PDFs
+  const [pdfDialogOpen, setPdfDialogOpen] = useState(false); // State for dialog
   const [showPdfs, setShowPdfs] = useState(false); // Toggle for PDF dropdown
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const sidebarWidth = 320; // Corresponds to w-80 in Tailwind CSS (80 * 4px)
@@ -392,7 +394,7 @@ export default function SkillBurnPage() {
                   {currentSessionId && (
                     <div className="relative">
                       <button
-                        onClick={() => setShowPdfs(!showPdfs)}
+                        onClick={() => setPdfDialogOpen(true)}
                         className="flex max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-full h-10 bg-[#293038] text-white gap-2 text-sm font-bold leading-normal tracking-[0.015em] min-w-0 px-2.5"
                         title="View your generated PDFs"
                       >
@@ -408,94 +410,13 @@ export default function SkillBurnPage() {
                         )}
                       </button>
 
-                      {/* PDF Dropdown */}
-                      {showPdfs && (
-                        <div className="absolute right-0 top-12 w-80 bg-[#293038] rounded-lg shadow-lg border border-[#3c4753] z-50 max-h-96 overflow-y-auto">
-                          <div className="p-4">
-                            <h3 className="text-white text-lg font-bold mb-4 flex items-center gap-2">
-                              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6z" clipRule="evenodd" />
-                              </svg>
-                              Your Generated PDFs ({userPdfs.length})
-                            </h3>
-
-                            {userPdfs.length === 0 ? (
-                              <div className="text-center py-8">
-                                <svg className="w-16 h-16 mx-auto mb-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-                                  <path fillRule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6z" clipRule="evenodd" />
-                                </svg>
-                                <h4 className="text-white text-lg font-semibold mb-2">No PDFs Generated Yet</h4>
-                                <p className="text-gray-400 mb-4">
-                                  Start a conversation with the agent to generate course materials and roadmaps.
-                                </p>
-                              </div>
-                            ) : (
-                              <div className="space-y-3">
-                                {userPdfs.map((pdf) => (
-                                  <div
-                                    key={pdf.id}
-                                    className="p-3 bg-[#111418] rounded-lg border border-[#3c4753] hover:border-[#1978e5] transition-all duration-200"
-                                  >
-                                    <div className="flex items-center justify-between">
-                                      <div className="flex-1">
-                                        <div className="flex items-center gap-3 mb-2">
-                                          <div className="w-8 h-8 bg-red-100 rounded flex items-center justify-center">
-                                            <svg className="w-5 h-5 text-red-600" fill="currentColor" viewBox="0 0 20 20">
-                                              <path fillRule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6z" clipRule="evenodd" />
-                                            </svg>
-                                          </div>
-                                          <div>
-                                            <h4 className="text-white font-semibold">{pdf.filename}</h4>
-                                            <div className="flex items-center gap-4 text-sm text-gray-400">
-                                              <span className="capitalize">{pdf.pdfType.replace('_', ' ')}</span>
-                                              <span>•</span>
-                                              <span>{new Date(pdf.uploadDate).toLocaleDateString()}</span>
-                                              <span>•</span>
-                                              <span>{new Date(pdf.uploadDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                                            </div>
-                                          </div>
-                                        </div>
-                                      </div>
-                                      <div className="flex gap-2">
-                                        <button
-                                          onClick={() => downloadPdf(pdf.fileId, pdf.filename)}
-                                          className="px-3 py-1.5 bg-[#1978e5] hover:bg-[#1565c0] text-white rounded text-sm font-medium transition-colors duration-200 flex items-center gap-2"
-                                        >
-                                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
-                                          </svg>
-                                          Download
-                                        </button>
-
-                                        <button
-                                          onClick={() => {
-                                            // Open PDF in new tab for preview
-                                            const url = `/api/pdfs/${pdf.fileId}`;
-                                            window.open(url, '_blank');
-                                          }}
-                                          className="px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white rounded text-sm font-medium transition-colors duration-200 flex items-center gap-2"
-                                        >
-                                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                            <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
-                                            <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
-                                          </svg>
-                                          Preview
-                                        </button>
-                                      </div>
-                                    </div>
-                                  </div>
-                                ))}
-
-                                <div className="pt-4 border-t border-[#3c4753]">
-                                  <p className="text-gray-400 text-sm mb-2">
-                                    📄 <strong>Course PDFs:</strong> Detailed learning materials and structured content
-                                  </p>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
+                      {/* PDF Dialog */}
+                      <PdfViewerDialog
+                        open={pdfDialogOpen}
+                        onOpenChange={setPdfDialogOpen}
+                        pdfs={userPdfs}
+                        onDownloadPdf={downloadPdf}
+                      />
                     </div>
                   )}
 
@@ -577,115 +498,6 @@ export default function SkillBurnPage() {
                     </div>
                   </>
                 )}
-              </div>
-            )}
-
-            {/* PDF Panel */}
-            {showPdfs && session && (
-              <div className="mx-4 sm:mx-10 md:mx-20 lg:mx-40 mt-4 bg-[#293038] rounded-lg p-6 border border-[#3c4753]">
-                <h3 className="text-white text-lg font-bold mb-4 flex items-center gap-2">
-                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6z" clipRule="evenodd" />
-                  </svg>
-                  Your Generated PDFs ({userPdfs.length})
-                </h3>
-
-                {userPdfs.length === 0 ? (
-                  <div className="text-center py-8">
-                    <svg className="w-16 h-16 mx-auto mb-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6z" clipRule="evenodd" />
-                    </svg>
-                    <h4 className="text-white text-lg font-semibold mb-2">No PDFs Generated Yet</h4>
-                    <p className="text-gray-400 mb-4">
-                      Start a conversation with the agent to generate course materials and roadmaps.
-                    </p>
-                    <button
-                      onClick={() => {
-                        setShowPdfs(false);
-                        if (!currentSessionId) {
-                          setShowSessionSelector(true);
-                        }
-                      }}
-                      className="px-4 py-2 bg-[#1978e5] hover:bg-[#1565c0] text-white rounded-lg font-semibold transition-colors duration-200"
-                    >
-                      Start Learning
-                    </button>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {userPdfs.map((pdf) => (
-                      <div
-                        key={pdf.id}
-                        className="p-4 bg-[#111418] rounded-lg border border-[#3c4753] hover:border-[#1978e5] transition-all duration-200"
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-2">
-                              <div className="w-8 h-8 bg-red-100 rounded flex items-center justify-center">
-                                <svg className="w-5 h-5 text-red-600" fill="currentColor" viewBox="0 0 20 20">
-                                  <path fillRule="evenodd" d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 0v12h8V4H6z" clipRule="evenodd" />
-                                </svg>
-                              </div>
-                              <div>
-                                <h4 className="text-white font-semibold">{pdf.filename}</h4>
-                                <div className="flex items-center gap-4 text-sm text-gray-400">
-                                  <span className="capitalize">{pdf.pdfType.replace('_', ' ')}</span>
-                                  <span>•</span>
-                                  <span>{new Date(pdf.uploadDate).toLocaleDateString()}</span>
-                                  <span>•</span>
-                                  <span>{new Date(pdf.uploadDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                                </div>
-                              </div>
-                            </div>
-
-                            <div className="flex gap-2">
-                              <button
-                                onClick={() => downloadPdf(pdf.fileId, pdf.filename)}
-                                className="px-3 py-1.5 bg-[#1978e5] hover:bg-[#1565c0] text-white rounded text-sm font-medium transition-colors duration-200 flex items-center gap-2"
-                              >
-                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                  <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
-                                </svg>
-                                Download
-                              </button>
-
-                              <button
-                                onClick={() => {
-                                  // Open PDF in new tab for preview
-                                  const url = `/api/pdfs/${pdf.fileId}`;
-                                  window.open(url, '_blank');
-                                }}
-                                className="px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white rounded text-sm font-medium transition-colors duration-200 flex items-center gap-2"
-                              >
-                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                                  <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
-                                  <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
-                                </svg>
-                                Preview
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-
-                    <div className="pt-4 border-t border-[#3c4753]">
-                      <p className="text-gray-400 text-sm mb-2">
-                        📄 <strong>Course PDFs:</strong> Detailed learning materials and structured content
-                      </p>
-                      <p className="text-gray-400 text-sm">
-                        🗺️ <strong>Roadmap PDFs:</strong> Step-by-step learning paths and progression guides
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                <button
-                  onClick={() => setShowPdfs(false)}
-                  className="mt-4 px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg text-sm transition-colors duration-200"
-                >
-                  Close PDFs
-                </button>
               </div>
             )}
 

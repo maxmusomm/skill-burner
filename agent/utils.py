@@ -45,7 +45,7 @@ async def process_agent_response(event) -> str | None:
                 f"\n╔══ AGENT RESPONSE ═════════════════════════════════════════{final_response}")
         else:
             print(
-                f"\n==>NOT THE SKILL CONSULTANT <==\n"
+                f"\n==>NOT THE SKILL{event.author} CONSULTANT <==\n"
             )
 
     return final_response

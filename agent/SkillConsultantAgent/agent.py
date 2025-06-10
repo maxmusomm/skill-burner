@@ -80,11 +80,11 @@ async def html_to_pdf_course(html_content: str, course_name:str, user_id: str, s
     pdf_buffer.seek(0)
     
     # Store PDF in MongoDB GridFS
-    file_id = await fs.put(
+    file_id = fs.put(
         pdf_buffer.getvalue(),
         filename=f"{course_name}.pdf",
-        userId=user_id,
-        sessionId=session_id,
+        userId=tool_context.state.get("user_id"),
+        sessionId=tool_context.state.get("session_id"),
         content_type="application/pdf",
         #upload_date=datetime.utcnow(),
         pdf_type="course"
@@ -93,8 +93,8 @@ async def html_to_pdf_course(html_content: str, course_name:str, user_id: str, s
     # Also store metadata in pdfs collection
     mongo_db.pdfs.insert_one({
         "file_id": file_id,
-        "userId": user_id,
-        "sessionId": session_id,
+        "userId": tool_context.state.get("user_id"),
+        "sessionId": tool_context.state.get("session_id"),
         "filename": f"{course_name}.pdf",
         "pdf_type": "course",
         #"upload_date": datetime.utcnow(),
@@ -103,8 +103,8 @@ async def html_to_pdf_course(html_content: str, course_name:str, user_id: str, s
     
     return {
         "file_id": str(file_id),
-        "userId": user_id,
-        "sessionId": session_id,
+        "userId": tool_context.state.get("user_id"),
+        "sessionId": tool_context.state.get("session_id"),
         "filename": f"{course_name}.pdf",
         "pdf_type": "course",
         "status": "PDF stored in MongoDB successfully"
@@ -654,76 +654,49 @@ skill_course_pdf_creation_agent = LlmAgent(
     description="Agent that creates a PDF document of the plan for the user to learn the skill they want to learn",
     model=GEMINI_MODEL_flash,
     instruction=f"""
-        
 ## Role
-Learning Course Document Generator - transforms structured learning plans into professional PDF documents.
+Generate PDF learning document from plan data using the `html_to_pdf_course` tool.
 
-## Input Sources
-- `{DRAFTED_POINTS}` - User's learning profile and goals
-- `{RESOURCES_STATE}` - Curated learning resources 
-- `{PLAN}` - Structured learning roadmap
-- Output: `html_to_pdf` converter for PDF generation
+## Task
+1. **Parse** `{PLAN}` JSON from state
+2. **Extract** user info from `{DRAFTED_POINTS}` 
+3. **Include** resources from `{RESOURCES_STATE}`
+4. **Build** complete HTML document following `html_course_example` styling
+5. **Execute** `html_to_pdf_course` tool immediately
 
-## Document Structure
-Create comprehensive learning document with:
-1. **Executive Summary** - Goals and plan overview
-2. **Learning Roadmap** - Visual skill progression
-3. **Detailed Step Guide** - Instructions for each phase
-4. **Resource Directory** - Organized learning materials
-5. **Assessment Framework** - Progress markers and challenges
-6. **Reference Section** - Key info and supplementary materials
+## HTML Structure Required
+Follow `html_course_example` template with these sections:
+- Course header with title and description
+- Learning steps as module items
+- Resource links
+- Assessment questions
+- All content from the plan data
 
-## HTML Requirements
-- **Professional Layout** - Follow the exact styling from `html_course_example` template
-- **Print-Friendly** - Optimized for PDF with proper page breaks
-- **Content Hierarchy** - Clear sections, headings, organization
-
-### Step Format Template:
-```html
-<div class="learning-step">
-  <h3>Step [number]: [title]</h3>
-  <div class="step-details">
-    <p><strong>Duration:</strong> [duration]</p>
-    <p><strong>Objective:</strong> [objective]</p>
-    <div class="actions"><h4>Actions:</h4><ul>[action items]</ul></div>
-    <div class="resources"><h4>Resources:</h4>[formatted resources]</div>
-    <div class="practice"><h4>Practice:</h4>[activity]</div>
-    <div class="assessment"><h4>Assessment:</h4>[questions]</div>
-    <div class="success-criteria"><h4>Success:</h4>[completion indicators]</div>
-  </div>
-</div>
-```
-
-## Implementation Process
-1. **Parse** `{PLAN}` JSON structure
-2. **Extract** key info from `{DRAFTED_POINTS}` for personalization  
-3. **Organize** `{RESOURCES_STATE}` by learning progression
-4. **Build** HTML following `html_course_example` styling exactly
-5. **Generate** PDF using `html_to_pdf_course` tool
-
-## Tool Usage (Required)
+## Tool Execution (Do This Now)
 ```python
 html_to_pdf_course(
-    html_content="your_generated_html",
-    course_name="Course Title", 
+    html_content="complete_html_string_here",
+    course_name="you create the course name based on the plan", 
     user_id="{USER_ID_STATE}",
     session_id="{SESSION_ID_STATE}"
 )
 ```
 
-## Quality Checklist
-- [ ] All plan components included
-- [ ] User goals from `{DRAFTED_POINTS}` reflected
-- [ ] Resources from `{RESOURCES_STATE}` integrated
-- [ ] Valid HTML with proper styling
-- [ ] Professional appearance for reference use
-
-**Goal**: Create a comprehensive learning companion that guides users through their skill development journey with clear, actionable steps and organized resources.
+**Action Required**: Generate complete HTML from plan data and execute the tool immediately. No additional text or explanations needed.
 """,
     tools=[html_to_pdf_course_tool],
 )
 
-
+finalizing_agent = LlmAgent(
+    name="finalizing_agent",
+    description="Agent that finalizes the learning plan and resources for the user",
+    model=GEMINI_MODEL_flash,
+    instruction=f"""
+        **Role**:
+            Your role is to let the user know that their skill course is ready.
+        """,
+    output_key="final_message",
+)
 
 
 # --- Agent Team Definitions ---
@@ -732,7 +705,7 @@ html_to_pdf_course(
 skill_learning_agent_team = SequentialAgent(
     name="SkillLearningAgentTeam",
     description="Agent team that creates a road map, plan and play book for the user to learn the skill which the asked/told you to help them learn.",
-    sub_agents=[search_query_agent, search_analysis_loop, plan_creation_agent, skill_course_pdf_creation_agent],
+    sub_agents=[search_query_agent, search_analysis_loop, plan_creation_agent, skill_course_pdf_creation_agent, finalizing_agent],
 )
 
 # --- Root Agent Definition ---
