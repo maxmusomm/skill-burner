@@ -214,46 +214,16 @@ io.on('connection', (socket) => {
             console.log('Sending POST request to API with payload:', payload);
 
 
-            const response = await axios.post(`${AGENT_API_URL}/run`, payload, {
+            const agentResponse = await axios.post(`${AGENT_API_URL}/run`, payload, {
                 headers: {
                     'Content-Type': 'application/json',
                 },
             });
 
-            console.log('API Response:', response.data);
+            console.log('API Response:', agentResponse);
 
             // Extract the agent response - handle variable position and filter by author
-            if (response.data && response.data.length > 0) {
-                // Filter responses to only include SkillConsultantAgent
-                const skillConsultantResponses = response.data.filter(item =>
-                    item.author === 'SkillConsultantAgent'
-                );
-
-                if (skillConsultantResponses.length === 0) {
-                    console.log('No responses from SkillConsultantAgent found');
-                    return;
-                }
-
-                // Find the final text response from SkillConsultantAgent
-                let agentResponse = null;
-
-                // Look for the last response with text content and role "model"
-                for (let i = skillConsultantResponses.length - 1; i >= 0; i--) {
-                    const item = skillConsultantResponses[i];
-                    if (item.content &&
-                        item.content.parts &&
-                        item.content.parts.length > 0 &&
-                        item.content.role === 'model') {
-
-                        // Look for a text part (not functionCall or functionResponse)
-                        const textPart = item.content.parts.find(part => part.text);
-                        if (textPart && textPart.text) {
-                            agentResponse = textPart.text.trim();
-                            console.log(`Found text response from ${item.author}:`, agentResponse);
-                            break;
-                        }
-                    }
-                }
+            if (agentResponse) {
 
                 if (agentResponse) {
                     // Store agent message in session
@@ -261,7 +231,7 @@ io.on('connection', (socket) => {
                     const agentMessageData = {
                         id: agentMessageId,
                         by: 'agent',
-                        msg: agentResponse,
+                        msg: agentResponse.data,
                         timestamp: new Date()
                     };
 
@@ -275,7 +245,7 @@ io.on('connection', (socket) => {
                     // Create agent message object for backwards compatibility
                     const agentMessage = {
                         id: agentMessageId,
-                        text: agentResponse,
+                        text: agentResponse.data,
                         sender: 'agent',
                         timestamp: new Date().toISOString()
                     };

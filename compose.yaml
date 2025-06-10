@@ -24,12 +24,19 @@ services:
     build: ./agent
     environment:
       GOOGLE_GENAI_USE_VERTEXAI: FALSE
-      GOOGLE_API_KEY: <Enter gemini api key here>
+      GOOGLE_API_KEY: AIzaSyAY2uWmXVHhW6P7w_v4ZupmjC6T7XEAtf0
       MONGO_DB_URI: mongodb://mongodb:27017
     ports:
       - "8000:8000"
     depends_on:
       - mongodb
+  # postgres:
+  #   image: postgres
+  #   ports:
+  #     - "5432:5432"
+  #   environment:
+  #     POSTGRES_PASSWORD: mysecretpassword
+  #     POSTGRES_DB_URI: postgresql://postgres:mysecretpassword@postgres:5432/skill-burner-pg
   mongodb:
     image: mongodb/mongodb-community-server:latest
     ports:

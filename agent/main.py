@@ -1,6 +1,7 @@
+import json
 import asyncio
+import os
 from dotenv import load_dotenv
-from os import eventfd
 from fastapi import FastAPI
 from google.adk.events.event import Event
 from google.adk.sessions.session import Session
@@ -13,6 +14,36 @@ from SkillConsultantAgent.agent import root_agent
 from google.adk.sessions import DatabaseSessionService
 from google.adk.runners import Runner
 from google.genai import types
+from utils import process_agent_response
+
+
+# --- JSON SERIALIZATION PATCH FOR GROUNDINGMETADATA ---
+# This patch ensures that any GroundingMetadata or related objects are converted to dicts before being stored in the DB.
+from google.genai import types as genai_types
+import dataclasses
+
+_original_json_encoder_default = json.JSONEncoder.default
+
+def custom_json_encoder_default(self, o) ->  Any | dict[str, Any] | Any:
+    # Handle GroundingMetadata and related types
+    if hasattr(o, 'model_dump'):
+        try:
+            return o.model_dump(mode='json')
+        except Exception:
+            pass
+    if hasattr(o, 'dict'):
+        try:
+            return o.dict()
+        except Exception:
+            pass
+    if dataclasses.is_dataclass(o) and not isinstance(o, type):
+        return dataclasses.asdict(o)
+    # Fallback to original
+    return _original_json_encoder_default(self, o)
+
+json.JSONEncoder.default = custom_json_encoder_default
+# --- END PATCH ---
+
 
 app = FastAPI()
 
@@ -21,7 +52,7 @@ async def read_root():
     return {"message": "Agent server is running"}
 
 db_url = "sqlite:///./my_agent_data.db"
-# db_url = "postgresql://postgres:mysecretpassword@localhost:5432/skill-burner-pg"
+# db_url: str | None = os.getenv("POSTGRES_DB_URI", "postgresql://postgres:mysecretpassword@postgres:5432/postgres")
 session_service = DatabaseSessionService(db_url=db_url)
 
 
@@ -58,7 +89,7 @@ async def delete_session_endpoint(app_name: str, user_id: str, session_id: str) 
     await session_service.delete_session(app_name=app_name, user_id=user_id, session_id=session_id)
 
 @app.post("/run")
-async def run_agent_endpoint(request_body: RunRequest) -> List[Dict[str, Any]]: # Return type changed
+async def run_agent_endpoint(request_body: RunRequest) -> str | None: # Return type changed
     runner = Runner(agent=root_agent, session_service=session_service, app_name=request_body.app_name) # Use app_name from request
 
     user_message_text = ""
@@ -71,59 +102,26 @@ async def run_agent_endpoint(request_body: RunRequest) -> List[Dict[str, Any]]: 
         parts=[types.Part(text=user_message_text)]
     )
 
-    event_generator: AsyncGenerator[Event, None] = runner.run_async(
-        user_id=request_body.user_id,
-        session_id=request_body.session_id,
-        new_message=user_content
-    )
+    print(f"AGENT_LOG: /run endpoint called for user: {request_body.user_id}, session: {request_body.session_id}, message: '{user_message_text}'") # Debug log
 
-    response_events: List[Dict[str, Any]] = []
-    async for event_obj in event_generator:
-        event_dict: Dict[str, Any] = {}
-        if hasattr(event_obj, 'model_dump'): # Pydantic v2+
-            event_dict = event_obj.model_dump(by_alias=True, exclude_none=False)
-        elif hasattr(event_obj, 'dict'): # Pydantic v1
-            event_dict = event_obj.dict(by_alias=True, exclude_none=False)
-        else:
-            # Fallback if not a Pydantic model - this might not perfectly match the nested structure
-            # This part is a simplified fallback and might need adjustment if Event is not Pydantic
-            # and has complex nested objects that don't auto-serialize well.
-            event_dict = {
-                "id": getattr(event_obj, 'id', None),
-                "author": getattr(event_obj, 'author', None),
-                "timestamp": getattr(event_obj, 'timestamp', None),
-                "invocationId": getattr(event_obj, 'invocation_id', None), # Assuming ADK model uses invocation_id
-                "content": None, # Placeholder, will be populated below
-                "actions": getattr(event_obj, 'actions', None),
-                "longRunningToolIds": getattr(event_obj, 'long_running_tool_ids', None),
-            }
-            if hasattr(event_obj, 'content') and event_obj.content:
-                content_data = event_obj.content
-                serialized_parts = []
-                if hasattr(content_data, 'parts') and content_data.parts:
-                    for part_item in content_data.parts:
-                        if hasattr(part_item, 'model_dump'):
-                            serialized_parts.append(part_item.model_dump(by_alias=True))
-                        elif hasattr(part_item, 'dict'):
-                            serialized_parts.append(part_item.dict(by_alias=True))
-                        elif isinstance(part_item, dict):
-                             serialized_parts.append(part_item)
-                        else: # Very basic serialization for unknown part types
-                            serialized_parts.append(vars(part_item) if not isinstance(part_item, (str, int, float, bool, list, tuple, dict)) else part_item)
-                event_dict["content"] = {
-                    "role": getattr(content_data, 'role', None),
-                    "parts": serialized_parts
-                }
-
-        # Ensure 'actions' and 'longRunningToolIds' conform to the example (empty dict/list if None)
-        if event_dict.get("actions") is None:
-            event_dict["actions"] = {}
-        if event_dict.get("longRunningToolIds") is None:
-            event_dict["longRunningToolIds"] = []
+    final_response = ""
         
-        response_events.append(event_dict)
-    
-    return response_events
+        # Log the author and content of the serialized event_dict
+        # Using json.dumps for content part to handle complex structures cleanly in logs
+    try:
+        async for event in runner.run_async(
+            user_id=request_body.user_id,
+            session_id=request_body.session_id,
+            new_message=user_content
+        ):
+            response: str | None = await process_agent_response(event)
+            if response:
+                final_response: str = response
+    except Exception as e:
+        print(f"Error during agent call: {e}")
+        
+        
+    return final_response
 
 
     
