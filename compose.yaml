@@ -27,6 +27,7 @@ services:
       GOOGLE_API_KEY: AIzaSyAY2uWmXVHhW6P7w_v4ZupmjC6T7XEAtf0
       MONGO_DB_URI: mongodb+srv://SkillUp:2iaMEPhsVWs%40Var@skillup.6fx3ja5.mongodb.net/?retryWrites=true&w=majority&appName=SkillUp
       MONGO_DB_NAME: SkillUp
+      AGENT_DB_URI: postgresql://neondb_owner:npg_SxtUVG1hTL7w@ep-curly-violet-a8tsn8wq-pooler.eastus2.azure.neon.tech/neondb?sslmode=require
     ports:
       - "8000:8000"
     # depends_on:

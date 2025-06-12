@@ -51,7 +51,7 @@ app = FastAPI()
 async def read_root():
     return {"message": "Agent server is running"}
 
-db_url = os.getenv("AGENT_DB","sqlite:///./my_agent_data.db")
+db_url = os.getenv("AGENT_DB_URI","sqlite:///./my_agent_data.db")
 session_service = DatabaseSessionService(db_url=db_url)
 
 
