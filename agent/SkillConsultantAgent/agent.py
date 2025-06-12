@@ -28,7 +28,7 @@ GEMINI_MODEL_flash = "gemini-2.0-flash-lite"
 
 # --- MongoDB Setup for PDF Storage ---
 mongo_client = MongoClient(os.getenv("MONGO_DB_URI", "mongodb://localhost:27017")) # Changed from localhost
-mongo_db = mongo_client["skill-burner"]
+mongo_db = mongo_client[os.getenv("MONGO_DB_NAME", "skill-burner")]
 fs = gridfs.GridFS(mongo_db, collection='pdfs')
 
 
@@ -687,17 +687,6 @@ html_to_pdf_course(
     tools=[html_to_pdf_course_tool],
 )
 
-finalizing_agent = LlmAgent(
-    name="finalizing_agent",
-    description="Agent that finalizes the learning plan and resources for the user",
-    model=GEMINI_MODEL_flash,
-    instruction=f"""
-        **Role**:
-            Your role is to let the user know that their skill course is ready.
-        """,
-    output_key="final_message",
-)
-
 
 # --- Agent Team Definitions ---
 
@@ -705,7 +694,7 @@ finalizing_agent = LlmAgent(
 skill_learning_agent_team = SequentialAgent(
     name="SkillLearningAgentTeam",
     description="Agent team that creates a road map, plan and play book for the user to learn the skill which the asked/told you to help them learn.",
-    sub_agents=[search_query_agent, search_analysis_loop, plan_creation_agent, skill_course_pdf_creation_agent, finalizing_agent],
+    sub_agents=[search_query_agent, search_analysis_loop, plan_creation_agent, skill_course_pdf_creation_agent],
 )
 
 # --- Root Agent Definition ---
@@ -825,7 +814,7 @@ You are a professional learning consultant specializing in understanding people'
 
 3. **User Communication**: Inform the user: "Perfect! I have a clear understanding of your learning goals. I'm now connecting you with our specialized course creation team who will design a personalized learning roadmap based on our conversation."
 
-4. **Transfer Control**: Hand off to `SkillLearningAgentTeam` with complete context.
+4. **Transfer Control**: Hand off to `SkillLearningAgentTeam` with complete context. Once the SkillLearningAgentTeam is done, there will be a state key `final_message` that will contain the final message which you should send to the user. This is the last important step in the skilllearningagent process.
 
 ## Communication Guidelines:
 - Be warm, professional, and encouraging

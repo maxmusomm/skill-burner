@@ -6,30 +6,31 @@ services:
     ports:
       - "3000:3000"
     environment:
-      NEXT_PUBLIC_MONGO_URI: mongodb://mongodb:27017
-      NEXT_PUBLIC_MONGO_DB_NAME: skill-burner
+      NEXT_PUBLIC_MONGO_URI: mongodb+srv://SkillUp:2iaMEPhsVWs%40Var@skillup.6fx3ja5.mongodb.net/?retryWrites=true&w=majority&appName=SkillUp
+      NEXT_PUBLIC_MONGO_DB_NAME: SkillUp
       NEXT_PUBLIC_SOCKET_IO_URL: http://server:9000
   server:
     depends_on:
       - agent
-      - mongodb
+      # - mongodb
     build: ./server
     ports:
       - "9000:9000"
     environment:
-      MONGO_DB_URI: mongodb://mongodb:27017
-      MONGO_DB_NAME: skill-burner
+      MONGO_DB_URI: mongodb+srv://SkillUp:2iaMEPhsVWs%40Var@skillup.6fx3ja5.mongodb.net/?retryWrites=true&w=majority&appName=SkillUp
+      MONGO_DB_NAME: SkillUp
       AGENT_API_URL: http://agent:8000
   agent:
     build: ./agent
     environment:
       GOOGLE_GENAI_USE_VERTEXAI: FALSE
       GOOGLE_API_KEY: AIzaSyAY2uWmXVHhW6P7w_v4ZupmjC6T7XEAtf0
-      MONGO_DB_URI: mongodb://mongodb:27017
+      MONGO_DB_URI: mongodb+srv://SkillUp:2iaMEPhsVWs%40Var@skillup.6fx3ja5.mongodb.net/?retryWrites=true&w=majority&appName=SkillUp
+      MONGO_DB_NAME: SkillUp
     ports:
       - "8000:8000"
-    depends_on:
-      - mongodb
+    # depends_on:
+    #   - mongodb
   # postgres:
   #   image: postgres
   #   ports:
@@ -37,11 +38,11 @@ services:
   #   environment:
   #     POSTGRES_PASSWORD: mysecretpassword
   #     POSTGRES_DB_URI: postgresql://postgres:mysecretpassword@postgres:5432/skill-burner-pg
-  mongodb:
-    image: mongodb/mongodb-community-server:latest
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongodb_data:/data/db
-volumes:
-  mongodb_data:
+#   mongodb:
+#     image: mongodb/mongodb-community-server:latest
+#     ports:
+#       - "27017:27017"
+#     volumes:
+#       - mongodb_data:/data/db
+# volumes:
+#   mongodb_data:

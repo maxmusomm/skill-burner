@@ -31,21 +31,20 @@ async def process_agent_response(event) -> str | None:
 
     # Check for final response after specific parts
     final_response = None
-    if event.is_final_response():
-        if (
-            event.content
-            and event.author == "SkillConsultantAgent"
-            and event.content.parts
-            and hasattr(event.content.parts[0], "text")
-            and event.content.parts[0].text
-        ):
-            final_response = event.content.parts[0].text.strip()
-            # Use colors and formatting to make the final response stand out
-            print(
-                f"\n╔══ AGENT RESPONSE ═════════════════════════════════════════{final_response}")
-        else:
-            print(
-                f"\n==>NOT THE SKILL{event.author} CONSULTANT <==\n"
-            )
+    if (
+        event.content
+        and event.author == "SkillConsultantAgent"
+        and event.content.parts
+        and hasattr(event.content.parts[0], "text")
+        and event.content.parts[0].text
+    ):
+        final_response = event.content.parts[0].text.strip()
+        # Use colors and formatting to make the final response stand out
+        print(
+            f"\n╔══ AGENT RESPONSE ═════════════════════════════════════════{final_response}")
+    else:
+        print(
+            f"\n==>NOT THE SKILL{event.author} CONSULTANT <==\n"
+        )
 
     return final_response

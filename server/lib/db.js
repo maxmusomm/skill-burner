@@ -15,14 +15,8 @@ const connectToMongoDB = async () => {
         mongoDB = mongoClient.db(dbName);
         console.log('Connected to MongoDB successfully');
 
-        // Create indexes for better performance
-        await mongoDB.collection('users').createIndex({ email: 1 }, { unique: true });
-        await mongoDB.collection('sessions').createIndex({ sessionId: 1 }, { unique: true });
-        await mongoDB.collection('sessions').createIndex({ userId: 1 });
-
     } catch (error) {
         console.error('Error connecting to MongoDB:', error);
-        // Propagate the error to allow server.js to handle it or exit
         throw error;
     }
 };

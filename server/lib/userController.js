@@ -3,7 +3,8 @@ const { getDB } = require('./db');
 // User management functions
 const createOrUpdateUser = async (userData) => {
     try {
-        const usersCollection = getDB().collection('users');
+        const db = await getDB();
+        const usersCollection = db.collection('users');
         const { email, name, image } = userData;
 
         // Check if user exists by email only
