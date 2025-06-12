@@ -51,8 +51,7 @@ app = FastAPI()
 async def read_root():
     return {"message": "Agent server is running"}
 
-db_url = "sqlite:///./my_agent_data.db"
-# db_url: str | None = os.getenv("POSTGRES_DB_URI", "postgresql://postgres:mysecretpassword@postgres:5432/postgres")
+db_url = os.getenv("AGENT_DB","sqlite:///./my_agent_data.db")
 session_service = DatabaseSessionService(db_url=db_url)
 
 
