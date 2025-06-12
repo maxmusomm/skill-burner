@@ -27,8 +27,8 @@ GEMINI_MODEL_flash = "gemini-2.0-flash-lite"
 
 
 # --- MongoDB Setup for PDF Storage ---
-mongo_client = MongoClient(os.getenv("MONGO_DB_URI", "mongodb://localhost:27017")) # Changed from localhost
-mongo_db = mongo_client[os.getenv("MONGO_DB_NAME", "skill-burner")]
+mongo_client = MongoClient("mongodb+srv://SkillUp:2iaMEPhsVWs%40Var@skillup.6fx3ja5.mongodb.net/?retryWrites=true&w=majority&appName=SkillUp") # Changed from localhost
+mongo_db = mongo_client["SkillUp"]
 fs = gridfs.GridFS(mongo_db, collection='pdfs')
 
 
