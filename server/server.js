@@ -9,6 +9,8 @@ const { createAgentSession, deleteAgentSession } = require('./lib/agentControlle
 const dotenv = require('dotenv');
 dotenv.config();
 
+const PORT = process.env.PORT || 9000;
+
 // MongoDB connection
 connectToMongoDB().catch(error => {
     console.error("Failed to connect to MongoDB on startup:", error);
@@ -362,7 +364,7 @@ io.on('connection', (socket) => {
     });
 });
 
-httpServer.listen(9000, '0.0.0.0', () => {
+httpServer.listen(PORT, '0.0.0.0', () => {
     console.log('Socket.IO server running on port 9000');
     console.log('Using in-memory storage for messages and sessions');
 });

@@ -5,6 +5,8 @@ import { signOut } from "next-auth/react";
 import { useSession } from "next-auth/react";
 import Sidebar from "./components/Sidebar";
 import PdfViewerDialog from "@/components/pdf-viewer-dialog";
+import dotenv from "dotenv";
+dotenv.config();
 
 export default function SkillBurnPage() {
   const { data: session, status } = useSession();
@@ -91,7 +93,7 @@ export default function SkillBurnPage() {
 
   useEffect(() => {
     // Initialize socket connection
-    const newSocket = io("http://localhost:9000");
+    const newSocket = io(process.env.NEXT_PUBLIC_SOCKET_IO_URL || "http://localhost:9000");
     setSocket(newSocket);
 
     newSocket.on("connect", () => {
