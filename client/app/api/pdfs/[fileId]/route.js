@@ -62,8 +62,8 @@ export async function GET(request, { params }) {
         return new NextResponse(buffer, {
             status: 200,
             headers: {
-                'Content-Type': 'application/pdf',
-                'Content-Disposition': `attachment; filename="${pdfRecord.filename}.pdf"`,
+                'Content-Type': pdfRecord.content_type || 'application/pdf',
+                'Content-Disposition': `attachment; filename="${pdfRecord.filename}"`,
                 'Content-Length': buffer.length.toString(),
             },
         });
