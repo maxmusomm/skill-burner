@@ -23,28 +23,52 @@ async function connectToMongoDB() {
 }
 
 export async function GET(request, { params }) {
-    const session = await auth()
+    const session = await auth();
 
     if (!session) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     try {
-        const client = await connectToMongoDB()
-        const db = client.db(DB_NAME)
+        const { fileId } = params;
 
-        // Fetch all PDFs for the current session
-        const pdfsCollection = db.collection('pdfs')
-        const pdfs = await pdfsCollection.find({ sessionId: session.id }).toArray()
-
-        if (!pdfs || pdfs.length === 0) {
-            return NextResponse.json({ error: "No PDFs found for this session" }, { status: 404 })
+        if (!fileId) {
+            return NextResponse.json({ error: "File ID is required" }, { status: 400 });
         }
 
-        // Return metadata for PDFs
-        return NextResponse.json({ pdfs }, { status: 200 })
+        const client = await connectToMongoDB();
+        const db = client.db(DB_NAME);
+
+        // Fetch the PDF metadata
+        const pdfsCollection = db.collection('pdfs');
+        const pdfRecord = await pdfsCollection.findOne({ file_id: new ObjectId(fileId) });
+
+        if (!pdfRecord) {
+            return NextResponse.json({ error: "PDF not found or access denied" }, { status: 404 });
+        }
+
+        // Get the PDF file from GridFS
+        const bucket = new GridFSBucket(db, { bucketName: 'pdfs' });
+        const downloadStream = bucket.openDownloadStream(new ObjectId(fileId));
+
+        // Convert stream to buffer
+        const chunks = [];
+        for await (const chunk of downloadStream) {
+            chunks.push(chunk);
+        }
+        const buffer = Buffer.concat(chunks);
+
+        // Return the PDF with appropriate headers
+        return new NextResponse(buffer, {
+            status: 200,
+            headers: {
+                'Content-Type': 'application/pdf',
+                'Content-Disposition': `attachment; filename="${pdfRecord.filename}.pdf"`,
+                'Content-Length': buffer.length.toString(),
+            },
+        });
     } catch (error) {
-        console.error('Error fetching PDFs:', error)
-        return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+        console.error('Error downloading PDF:', error);
+        return NextResponse.json({ error: "Internal server error" }, { status: 500 });
     }
 }
