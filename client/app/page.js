@@ -93,7 +93,8 @@ export default function SkillBurnPage() {
 
   useEffect(() => {
     // Initialize socket connection
-    const newSocket = io(process.env.NEXT_PUBLIC_SOCKET_IO_URL || "http://localhost:9000");
+    // const newSocket = io(process.env.NEXT_PUBLIC_SOCKET_IO_URL || "http://localhost:9000");
+    const newSocket = io("http://localhost:9000");
     setSocket(newSocket);
 
     newSocket.on("connect", () => {
@@ -294,6 +295,17 @@ export default function SkillBurnPage() {
     return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  // Fetch PDFs for the current session
+  useEffect(() => {
+    if (session && currentSessionId) {
+      fetchUserPdfs(currentSessionId);
+    }
+  }, [session, currentSessionId]);
+
+  const openPdfViewer = () => {
+    setPdfDialogOpen(true);
+  };
+
   return (
     <div
       className="relative flex size-full min-h-screen flex-col bg-[#111418] dark group/design-root overflow-x-hidden"
@@ -417,7 +429,12 @@ export default function SkillBurnPage() {
                         open={pdfDialogOpen}
                         onOpenChange={setPdfDialogOpen}
                         pdfs={userPdfs}
-                        onDownloadPdf={downloadPdf}
+                        onDownloadPdf={(pdf) => {
+                          const link = document.createElement("a");
+                          link.href = `/api/pdfs/${pdf.file_id}`;
+                          link.download = pdf.filename;
+                          link.click();
+                        }}
                       />
                     </div>
                   )}

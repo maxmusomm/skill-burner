@@ -13,7 +13,7 @@ import { Download, FileText } from "lucide-react";
 export default function PdfViewerDialog({
   open,
   onOpenChange,
-  pdfs = [],
+  pdfs,
   onDownloadPdf,
 }) {
   const hasPdfs = pdfs && pdfs.length > 0;
@@ -29,7 +29,7 @@ export default function PdfViewerDialog({
           <DialogDescription className="text-neutral-400 text-sm">
             {hasPdfs
               ? "Here are your generated PDF documents."
-              : "Start a conversation with the agent to generate course materials and roadmaps."}
+              : "No PDFs available for this session."}
           </DialogDescription>
         </DialogHeader>
         <div className="py-6 min-h-[200px] max-h-[400px] overflow-y-auto custom-scrollbar">
