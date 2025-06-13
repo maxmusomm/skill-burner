@@ -62,13 +62,11 @@ set_set_session_data_tool = FunctionTool(func=set_session_data)
 
 
 # Tool: html_to_pdf_course
-async def html_to_pdf_course(html_content: str, course_name:str, user_id: str, session_id: str, tool_context: ToolContext) -> dict:
+async def html_to_pdf_course(html_content: str, course_name:str, tool_context: ToolContext) -> dict:
     """A tool that converts HTML content to a PDF and stores it in MongoDB.
     Args:
         html_content (str): The HTML content to convert to PDF.
         course_name (str): The name of the course, used for the PDF filename.
-        user_id (str): The ID of the user.
-        session_id (str): The ID of the session.
         tool_context (ToolContext): The context in which the tool is called, including session state.
     Returns:
         dict: A dictionary containing the MongoDB file ID and metadata.
@@ -676,11 +674,11 @@ Follow `html_course_example` template with these sections:
 ```python
 html_to_pdf_course(
     html_content="complete_html_string_here",
-    course_name="you create the course name based on the plan", 
-    user_id="{USER_ID_STATE}",
-    session_id="{SESSION_ID_STATE}"
+    course_name="you create the course name based on the plan",
 )
 ```
+## HTML Example
+```{instructions.html_course_example}```
 
 **Action Required**: Generate complete HTML from plan data and execute the tool immediately. No additional text or explanations needed.
 """,
