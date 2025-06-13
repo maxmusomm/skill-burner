@@ -93,8 +93,7 @@ export default function SkillBurnPage() {
 
   useEffect(() => {
     // Initialize socket connection
-    // const newSocket = io(process.env.NEXT_PUBLIC_SOCKET_IO_URL || "http://localhost:9000");
-    const newSocket = io("http://localhost:9000");
+    const newSocket = io(process.env.NEXT_PUBLIC_SOCKET_IO_URL || "http://localhost:9000");
     setSocket(newSocket);
 
     newSocket.on("connect", () => {
