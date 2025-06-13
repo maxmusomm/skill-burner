@@ -27,7 +27,8 @@ const io = new Server(httpServer, {
 });
 
 // Agent API URL
-const AGENT_API_URL = process.env.AGENT_API_URL || 'http://localhost:8000';
+// const AGENT_API_URL = process.env.AGENT_API_URL || 'http://localhost:8000';
+const AGENT_API_URL = 'https://skill-burner-0pzp.onrender.com';
 
 io.on('connection', (socket) => {
     console.log('Client connected:', socket.id);
