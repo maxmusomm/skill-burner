@@ -44,8 +44,11 @@ export async function GET(request, { params }) {
         const pdfRecord = await pdfsCollection.findOne({ file_id: new ObjectId(fileId) });
 
         if (!pdfRecord) {
+            console.error(`PDF metadata not found for fileId: ${fileId}`);
             return NextResponse.json({ error: "PDF not found or access denied" }, { status: 404 });
         }
+
+        console.log(`PDF metadata retrieved:`, pdfRecord);
 
         // Get the PDF file from GridFS
         const bucket = new GridFSBucket(db, { bucketName: 'pdfs' });
@@ -57,6 +60,8 @@ export async function GET(request, { params }) {
             chunks.push(chunk);
         }
         const buffer = Buffer.concat(chunks);
+
+        console.log(`PDF file retrieved successfully. Buffer length: ${buffer.length}`);
 
         // Return the PDF with appropriate headers
         return new NextResponse(buffer, {
