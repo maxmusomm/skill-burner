@@ -4,8 +4,10 @@ import { MongoClient, GridFSBucket, ObjectId } from "mongodb"
 import dotenv from 'dotenv'
 dotenv.config()
 
-const MONGO_URI = process.env.MONGO_DB_URI || 'mongodb://localhost:27017';
-const DB_NAME = process.env.MONGO_DB_NAME || 'skill-burner';
+// const MONGO_URI = process.env.MONGO_DB_URI || 'mongodb://localhost:27017';
+// const DB_NAME = process.env.MONGO_DB_NAME || 'skill-burner';
+const MONGO_URI = 'mongodb+srv://SkillUp:2iaMEPhsVWs%40Var@skillup.6fx3ja5.mongodb.net/?retryWrites=true&w=majority&appName=SkillUp';
+const DB_NAME = process.env.MONGO_DB_NAME || 'SkillUp';
 
 
 let cachedClient = null
@@ -28,10 +30,14 @@ export async function GET(request) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    try {
-        const { searchParams } = new URL(request.url);
-        const sessionId = searchParams.get('sessionId');
+    const url = new URL(request.url);
+    const sessionId = url.searchParams.get("sessionId");
 
+    if (!sessionId) {
+        return NextResponse.json({ error: "Session ID is required" }, { status: 400 });
+    }
+
+    try {
         const client = await connectToMongoDB();
         const db = client.db(DB_NAME);
 
@@ -43,21 +49,18 @@ export async function GET(request) {
             return NextResponse.json({ error: "User not found" }, { status: 404 });
         }
 
-        // Build query filter
-        const query = { userId: user._id.toString() };
+        // Fetch all PDFs for the given session ID
+        const pdfsCollection = db.collection('pdfs');
+        const pdfs = await pdfsCollection.find({ sessionId }).toArray();
 
-        // If sessionId is provided, filter by session as well
-        if (sessionId) {
-            query.sessionId = sessionId;
+        if (!pdfs || pdfs.length === 0) {
+            return NextResponse.json({ error: "No PDFs found for this session" }, { status: 404 });
         }
 
-        // Get user's PDFs from the pdfs collection
-        const pdfsCollection = db.collection('pdfs');
-        const userPdfs = await pdfsCollection.find(query).sort({ uploadDate: -1 }).toArray();
-
+        // Return metadata for PDFs
         return NextResponse.json({
             success: true,
-            pdfs: userPdfs.map(pdf => ({
+            pdfs: pdfs.map(pdf => ({
                 id: pdf._id.toString(),
                 fileId: pdf.file_id.toString(),
                 filename: pdf.filename,
@@ -65,7 +68,7 @@ export async function GET(request) {
                 uploadDate: pdf.uploadDate,
                 contentType: pdf.content_type
             }))
-        });
+        }, { status: 200 });
     } catch (error) {
         console.error('Error fetching PDFs:', error);
         return NextResponse.json({ error: "Internal server error" }, { status: 500 });

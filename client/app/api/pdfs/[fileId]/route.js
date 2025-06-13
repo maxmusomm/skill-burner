@@ -4,8 +4,10 @@ import { MongoClient, GridFSBucket, ObjectId } from "mongodb"
 import dotenv from 'dotenv'
 dotenv.config()
 
-const MONGO_URI = process.env.NEXT_PUBLIC_MONGO_URI || "mongodb://localhost:27017"
-const DB_NAME = process.env.NEXT_PUBLIC_MONGO_DB_NAME || "skill-burner"
+// const MONGO_URI = process.env.NEXT_PUBLIC_MONGO_URI || "mongodb://localhost:27017"
+// const DB_NAME = process.env.NEXT_PUBLIC_MONGO_DB_NAME || "skill-burner"
+const MONGO_URI = 'mongodb+srv://SkillUp:2iaMEPhsVWs%40Var@skillup.6fx3ja5.mongodb.net/?retryWrites=true&w=majority&appName=SkillUp';
+const DB_NAME = process.env.MONGO_DB_NAME || 'SkillUp';
 
 let cachedClient = null
 
