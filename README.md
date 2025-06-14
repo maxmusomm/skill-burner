@@ -1,38 +1,51 @@
 # Skill Burner
 
-A dynamic, interactive learning application designed to help users acquire new skills through an AI-powered chat interface. It features real-time communication and personalized learning assistance.
+A comprehensive learning platform that leverages AI technology to provide personalized skill development through interactive conversations, dynamic content generation, and progress tracking. The platform combines real-time communication with intelligent learning assistance to create an engaging and effective learning experience.
 
 ## Features
 
-- **Interactive Chat Interface**: Users can communicate with an AI agent in real-time.
-- **AI-Powered Skill Consultation**: The backend leverages an AI agent (potentially Google ADK or similar) to understand user queries and provide learning guidance.
-- **Real-time Communication**: Utilizes Socket.IO for seamless, bidirectional communication between the client and server.
-- **Message Persistence**: The server stores chat messages in an in-memory database for the session.
-- **Scalable Architecture**: Built with a separate frontend (Next.js) and backend (Node.js), allowing for independent development and scaling.
+- **Interactive Chat Interface**: Engage with an AI learning consultant in real-time through a modern, user-friendly interface.
+- **AI-Powered Learning**: Powered by Google's Gemini model to provide intelligent, context-aware learning guidance.
+- **Personalized Learning Plans**: Receive customized skill development roadmaps based on your goals and current knowledge.
+- **PDF Document Generation**: Automatically generate and view course materials and assessments in PDF format.
+- **Session Management**: Persistent conversations with context retention across sessions.
+- **User Authentication**: Secure access with user authentication and session tracking.
+- **Progress Tracking**: Monitor your learning journey with built-in progress tracking.
+- **Real-time Updates**: Seamless communication using Socket.IO for instant responses.
+- **Multi-User Support**: Designed to handle multiple concurrent users with isolated sessions.
+- **MongoDB Integration**: Robust data persistence for user data, sessions, and learning materials.
 
 ## Architecture
 
-The project is composed of three main parts:
+The project is composed of three main components working together to deliver a comprehensive learning experience:
 
-1.  **Frontend (Client)**:
-    *   Built with Next.js and React.
-    *   Provides the user interface for the chat application.
-    *   Connects to the backend server via Socket.IO to send and receive messages.
-    *   Located in the `client/` directory.
+1.  **Frontend (Next.js Client)**:
 
-2.  **Backend (Server)**:
-    *   A Node.js application using Express and Socket.IO.
-    *   Manages WebSocket connections and communication with clients.
-    *   Stores chat messages in an in-memory array (`db`).
-    *   Forwards user messages to an AI agent service and relays the agent's responses back to the client.
-    *   Located in the `server/` directory.
+    - Built with Next.js, React, and TailwindCSS for a modern, responsive UI
+    - Features an interactive chat interface with real-time updates
+    - Implements user authentication and session management
+    - Includes a PDF viewer for course materials and assessments
+    - Manages WebSocket connections via Socket.IO for real-time communication
+    - Located in the `client/` directory
 
-3.  **AI Agent (Agent Service)**:
-    *   A separate Python service (likely using FastAPI or a similar framework, as suggested by the `agent/` directory structure).
-    *   Receives messages from the Node.js backend.
-    *   Processes the messages using an AI model (e.g., Google ADK/Gemini) to generate relevant responses.
-    *   Returns responses to the Node.js backend.
-    *   Located in the `agent/` directory.
+2.  **Backend (Node.js Server)**:
+
+    - Node.js application using Express and Socket.IO
+    - Handles real-time WebSocket connections and message routing
+    - Manages user sessions and authentication
+    - Integrates with MongoDB for persistent data storage
+    - Coordinates communication between client and AI agent
+    - Handles PDF document storage and retrieval
+    - Located in the `server/` directory
+
+3.  **AI Agent (Python Service)**:
+    - Python-based service using FastAPI
+    - Implements Google's Gemini model for intelligent responses
+    - Creates personalized learning plans and roadmaps
+    - Generates course materials and assessments
+    - Converts learning content to PDF format
+    - Maintains conversation context for personalized learning
+    - Located in the `agent/` directory
 
 ## Project Structure
 
@@ -66,29 +79,32 @@ skill-burner/
 This project is designed to be run using Docker Compose for ease of setup and orchestration of the different services.
 
 1.  **Prerequisites**:
-    *   Docker installed
-    *   Docker Compose installed
+
+    - Docker installed
+    - Docker Compose installed
 
 2.  **Environment Variables (for AI Agent)**:
-    *   Navigate to the `agent/` directory.
-    *   If there's an `.env.example` file, copy it to `.env`:
-        ```bash
-        cd agent
-        cp .env.example .env
-        ```
-    *   Edit the `.env` file with any necessary API keys or configuration for the AI agent service (e.g., Google API credentials).
+
+    - Navigate to the `agent/` directory.
+    - If there's an `.env.example` file, copy it to `.env`:
+      ```bash
+      cd agent
+      cp .env.example .env
+      ```
+    - Edit the `.env` file with any necessary API keys or configuration for the AI agent service (e.g., Google API credentials).
 
 3.  **Build and Run with Docker Compose**:
-    *   From the root `skill-burner/` directory, run:
-        ```bash
-        docker-compose up --build
-        ```
-    *   This command will build the Docker images for the client, server, and agent services (if they don't exist or have changed) and then start them.
+
+    - From the root `skill-burner/` directory, run:
+      ```bash
+      docker-compose up --build
+      ```
+    - This command will build the Docker images for the client, server, and agent services (if they don't exist or have changed) and then start them.
 
 4.  **Accessing the Application**:
-    *   **Frontend (Chat Interface)**: Open your browser and navigate to `http://localhost:3000` (or the port specified for the client service in `compose.yaml`).
-    *   **Backend Server (Socket.IO)**: Runs on port `9000` (as configured in `server/server.js` and potentially `compose.yaml`).
-    *   **AI Agent Service**: Runs on port `8000` (as configured in `agent/` and potentially `compose.yaml`).
+    - **Frontend (Chat Interface)**: Open your browser and navigate to `http://localhost:3000` (or the port specified for the client service in `compose.yaml`).
+    - **Backend Server (Socket.IO)**: Runs on port `9000` (as configured in `server/server.js` and potentially `compose.yaml`).
+    - **AI Agent Service**: Runs on port `8000` (as configured in `agent/` and potentially `compose.yaml`).
 
 ## Usage
 
@@ -99,23 +115,52 @@ This project is designed to be run using Docker Compose for ease of setup and or
 
 ## Technologies Used
 
-*   **Frontend**:
-    *   Next.js
-    *   React
-    *   Socket.IO Client
-    *   Tailwind CSS (based on class names)
-*   **Backend**:
-    *   Node.js
-    *   Express (implicitly, as `http.createServer()` is often used with it, though not explicitly shown in `server.js` for Socket.IO standalone)
-    *   Socket.IO
-*   **AI Agent**:
-    *   Python
-    *   FastAPI (assumption based on common practices and `agent/` structure)
-    *   Google ADK/Gemini (or a similar AI model/platform)
-*   **Containerization**:
-    *   Docker
-    *   Docker Compose
+- **Frontend**:
+
+  - Next.js 14+
+  - React
+  - TailwindCSS
+  - Socket.IO Client
+  - PDF.js for document viewing
+
+- **Backend**:
+
+  - Node.js
+  - Express
+  - Socket.IO
+  - MongoDB
+  - JSON Web Tokens (JWT)
+
+- **AI Service**:
+
+  - Python
+  - FastAPI
+  - Google Gemini
+  - PDF generation libraries
+
+- **Development & Deployment**:
+  - Docker
+  - Docker Compose
+  - Git
+  - Environment-based configuration
+
+* **Frontend**:
+  - Next.js
+  - React
+  - Socket.IO Client
+  - Tailwind CSS (based on class names)
+* **Backend**:
+  - Node.js
+  - Express (implicitly, as `http.createServer()` is often used with it, though not explicitly shown in `server.js` for Socket.IO standalone)
+  - Socket.IO
+* **AI Agent**:
+  - Python
+  - FastAPI (assumption based on common practices and `agent/` structure)
+  - Google ADK/Gemini (or a similar AI model/platform)
+* **Containerization**:
+  - Docker
+  - Docker Compose
 
 ---
 
-*This README provides a general overview. Specific configurations and details can be found within the respective service directories and code files.*
+_This README provides a general overview. Specific configurations and details can be found within the respective service directories and code files._
