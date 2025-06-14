@@ -5,6 +5,7 @@ import { signOut } from "next-auth/react";
 import { useSession } from "next-auth/react";
 import Sidebar from "./components/Sidebar";
 import PdfViewerDialog from "@/components/pdf-viewer-dialog";
+import TypingIndicator from '@/components/typing-indicator';
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -25,6 +26,7 @@ export default function SkillBurnPage() {
   const [pdfDialogOpen, setPdfDialogOpen] = useState(false); // State for dialog
   const [showPdfs, setShowPdfs] = useState(false); // Toggle for PDF dropdown
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isAgentResponding, setIsAgentResponding] = useState(false); // Loading state for agent response
   const sidebarWidth = 320; // Corresponds to w-80 in Tailwind CSS (80 * 4px)
 
   // Fetch user statistics
@@ -250,22 +252,32 @@ export default function SkillBurnPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const handleSendMessage = () => {
-    if (socket && message.trim() && currentSessionId) {
-      socket.emit("send_message", {
-        message: message.trim(),
-        sessionId: currentSessionId
-      });
-      setMessage(""); // Clear the input field
+  const handleSendMessage = async () => {
+    if (!message.trim() || !socket) return;
+
+    const currentMessage = message;
+    setMessage('');
+    setIsAgentResponding(true); // Start loading
+
+    try {
+      socket.emit('send_message', { message: currentMessage });
       if (textareaRef.current) {
-        textareaRef.current.value = ""; // Clear the textarea directly
-        // Optionally, trigger resize after clearing
-        const textarea = textareaRef.current;
-        textarea.style.height = "auto";
-        textarea.style.height = `${textarea.scrollHeight}px`;
+        textareaRef.current.style.height = 'auto';
       }
+    } catch (error) {
+      console.error('Error sending message:', error);
+      setMessage(currentMessage); // Restore message if send fails
     }
   };
+
+  // Add socket message handler
+  useEffect(() => {
+    if (socket) {
+      socket.on('new_message', (message) => {
+        setIsAgentResponding(false); // Stop loading when message received
+      });
+    }
+  }, [socket]);
 
   const handleInputChange = (e) => {
     setMessage(e.target.value);
@@ -549,21 +561,24 @@ export default function SkillBurnPage() {
                           </div>
                         </div>
                       ) : (
-                        messages.map((msg) => (
-                          <div key={msg.id} className="flex gap-3 p-4">
-                            <div className="flex flex-1 flex-col items-stretch gap-2">
-                              <div className="flex flex-col gap-1">
-                                <p className="text-white text-base font-bold leading-tight">
-                                  {msg.sender === 'user' ? 'User' : 'Agent'}
-                                </p>
-                                <p className={`text-white text-base font-normal leading-normal whitespace-pre-wrap ${msg.isError ? 'text-red-400' : ''
-                                  }`}>
-                                  {msg.text}
-                                </p>
+                        <>
+                          {messages.map((msg) => (
+                            <div key={msg.id} className="flex gap-3 p-4">
+                              <div className="flex flex-1 flex-col items-stretch gap-2">
+                                <div className="flex flex-col gap-1">
+                                  <p className="text-white text-base font-bold leading-tight">
+                                    {msg.sender === 'user' ? 'User' : 'Agent'}
+                                  </p>
+                                  <p className={`text-white text-base font-normal leading-normal whitespace-pre-wrap ${msg.isError ? 'text-red-400' : ''
+                                    }`}>
+                                    {msg.text}
+                                  </p>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        ))
+                          ))}
+                          {isAgentResponding && <TypingIndicator />}
+                        </>
                       )}
                       <div ref={messagesEndRef} />
                     </div>
