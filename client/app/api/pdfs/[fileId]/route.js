@@ -62,6 +62,7 @@ export async function GET(request, { params }) {
         const buffer = Buffer.concat(chunks);
 
         console.log(`PDF file retrieved successfully. Buffer length: ${buffer.length}`);
+        console.log(`Buffer content (first 100 bytes):`, buffer.slice(0, 100));
 
         // Return the PDF with appropriate headers
         return new NextResponse(buffer, {
