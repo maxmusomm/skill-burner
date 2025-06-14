@@ -30,7 +30,7 @@ export async function GET(request, { params }) {
     }
 
     try {
-        const { fileId } = params;
+        const { filename } = params;
 
         if (!fileId) {
             return NextResponse.json({ error: "File ID is required" }, { status: 400 });
@@ -41,7 +41,7 @@ export async function GET(request, { params }) {
 
         // Fetch the PDF metadata
         const pdfsCollection = db.collection('pdfs');
-        const pdfRecord = await pdfsCollection.findOne({ file_id: new ObjectId(fileId) });
+        const pdfRecord = await pdfsCollection.findOne({ filename: filename });
 
         if (!pdfRecord) {
             console.error(`PDF metadata not found for fileId: ${fileId}`);
