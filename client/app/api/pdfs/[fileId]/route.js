@@ -30,7 +30,7 @@ export async function GET(request, { params }) {
     }
 
     try {
-        const { filename } = params;
+        const { fileId } = params; // Corrected from 'filename' to 'fileId'
 
         if (!fileId) {
             return NextResponse.json({ error: "File ID is required" }, { status: 400 });
@@ -41,7 +41,7 @@ export async function GET(request, { params }) {
 
         // Fetch the PDF metadata
         const pdfsCollection = db.collection('pdfs');
-        const pdfRecord = await pdfsCollection.findOne({ filename: filename });
+        const pdfRecord = await pdfsCollection.findOne({ _id: new ObjectId(fileId) }); // Corrected query to use '_id' and 'fileId'
 
         if (!pdfRecord) {
             console.error(`PDF metadata not found for fileId: ${fileId}`);
@@ -69,7 +69,7 @@ export async function GET(request, { params }) {
             status: 200,
             headers: {
                 'Content-Type': pdfRecord.content_type || 'application/pdf',
-                'Content-Disposition': `attachment; filename="${pdfRecord.filename}"`,
+                'Content-Disposition': `attachment; filename="${pdfRecord.filename || 'download'}.pdf"`, // Ensures '.pdf' extension
                 'Content-Length': buffer.length.toString(),
             },
         });
