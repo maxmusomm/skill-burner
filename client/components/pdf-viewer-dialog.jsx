@@ -18,6 +18,27 @@ export default function PdfViewerDialog({
 }) {
   const hasPdfs = pdfs && pdfs.length > 0;
 
+  const handleDownload = async (pdf) => {
+    try {
+      const response = await fetch(`/api/pdfs/${pdf.fileId}`);
+      if (!response.ok) throw new Error("Download failed");
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = pdf.filename.endsWith(".pdf")
+        ? pdf.filename
+        : `${pdf.filename}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error("Error downloading PDF:", error);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px] bg-neutral-900 text-neutral-50 border border-neutral-700 shadow-lg rounded-lg">
@@ -49,7 +70,7 @@ export default function PdfViewerDialog({
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() => onDownloadPdf(pdf.fileId, pdf.filename)}
+                    onClick={() => handleDownload(pdf)}
                     className="text-neutral-400 hover:text-neutral-50 hover:bg-neutral-600 rounded-full"
                     aria-label={`Download ${pdf.filename}`}
                   >

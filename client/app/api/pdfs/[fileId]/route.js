@@ -4,10 +4,8 @@ import { MongoClient, GridFSBucket, ObjectId } from "mongodb"
 import dotenv from 'dotenv'
 dotenv.config()
 
-// const MONGO_URI = process.env.NEXT_PUBLIC_MONGO_URI || "mongodb://localhost:27017"
-// const DB_NAME = process.env.NEXT_PUBLIC_MONGO_DB_NAME || "skill-burner"
-const MONGO_URI = 'mongodb+srv://SkillUp:2iaMEPhsVWs%40Var@skillup.6fx3ja5.mongodb.net/?retryWrites=true&w=majority&appName=SkillUp';
-const DB_NAME = process.env.MONGO_DB_NAME || 'SkillUp';
+const MONGO_URI = process.env.NEXT_PUBLIC_MONGO_URI || "mongodb://localhost:27017"
+const DB_NAME = process.env.NEXT_PUBLIC_MONGO_DB_NAME || "skill-burner"
 
 let cachedClient = null
 
@@ -23,58 +21,76 @@ async function connectToMongoDB() {
 }
 
 export async function GET(request, { params }) {
-    const session = await auth();
+    const session = await auth()
 
     if (!session) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     try {
-        const { fileId } = params; // Corrected from 'filename' to 'fileId'
+        const { fileId } = params
 
         if (!fileId) {
-            return NextResponse.json({ error: "File ID is required" }, { status: 400 });
+            return NextResponse.json({ error: "File ID is required" }, { status: 400 })
         }
 
-        const client = await connectToMongoDB();
-        const db = client.db(DB_NAME);
+        const client = await connectToMongoDB()
+        const db = client.db(DB_NAME)
 
-        // Fetch the PDF metadata
-        const pdfsCollection = db.collection('pdfs');
-        const pdfRecord = await pdfsCollection.findOne({ _id: new ObjectId(fileId) }); // Corrected query to use '_id' and 'fileId'
+        // Get user ID from MongoDB users collection
+        const usersCollection = db.collection('users')
+        const user = await usersCollection.findOne({ email: session.user.email })
+
+        if (!user) {
+            return NextResponse.json({ error: "User not found" }, { status: 404 })
+        }
+
+        // Verify the PDF belongs to the user and get metadata
+        const pdfsCollection = db.collection('pdfs')
+        const pdfRecord = await pdfsCollection.findOne({
+            file_id: new ObjectId(fileId),
+            userId: user._id.toString()
+        })
 
         if (!pdfRecord) {
-            console.error(`PDF metadata not found for fileId: ${fileId}`);
-            return NextResponse.json({ error: "PDF not found or access denied" }, { status: 404 });
+            return NextResponse.json({ error: "PDF not found or access denied" }, { status: 404 })
         }
 
-        console.log(`PDF metadata retrieved:`, pdfRecord);
+        // Get the PDF file from GridFS using the file_id from pdfRecord
+        const bucket = new GridFSBucket(db, { bucketName: 'pdfs' })
 
-        // Get the PDF file from GridFS
-        const bucket = new GridFSBucket(db, { bucketName: 'pdfs' });
-        const downloadStream = bucket.openDownloadStream(new ObjectId(fileId));
+        try {
+            // Create a readable stream from GridFS using file_id from metadata
+            const downloadStream = bucket.openDownloadStream(pdfRecord.file_id)
 
-        // Convert stream to buffer
-        const chunks = [];
-        for await (const chunk of downloadStream) {
-            chunks.push(chunk);
+            // Convert stream to buffer
+            const chunks = []
+            for await (const chunk of downloadStream) {
+                chunks.push(chunk)
+            }
+            const buffer = Buffer.concat(chunks)
+
+            // Ensure filename ends with .pdf
+            const filename = pdfRecord.filename.endsWith('.pdf')
+                ? pdfRecord.filename
+                : `${pdfRecord.filename}.pdf`
+
+            // Return the PDF with appropriate headers
+            return new NextResponse(buffer, {
+                status: 200,
+                headers: {
+                    'Content-Type': 'application/pdf',
+                    'Content-Disposition': `attachment; filename="${filename}"`,
+                    'Content-Length': buffer.length.toString(),
+                },
+            })
+        } catch (error) {
+            console.error('Error streaming PDF:', error)
+            return NextResponse.json({ error: "Error retrieving PDF file" }, { status: 500 })
         }
-        const buffer = Buffer.concat(chunks);
 
-        console.log(`PDF file retrieved successfully. Buffer length: ${buffer.length}`);
-        console.log(`Buffer content (first 100 bytes):`, buffer.slice(0, 100));
-
-        // Return the PDF with appropriate headers
-        return new NextResponse(buffer, {
-            status: 200,
-            headers: {
-                'Content-Type': pdfRecord.content_type || 'application/pdf',
-                'Content-Disposition': `attachment; filename="${pdfRecord.filename || 'download'}.pdf"`, // Ensures '.pdf' extension
-                'Content-Length': buffer.length.toString(),
-            },
-        });
     } catch (error) {
-        console.error('Error downloading PDF:', error);
-        return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+        console.error('Error downloading PDF:', error)
+        return NextResponse.json({ error: "Internal server error" }, { status: 500 })
     }
 }
